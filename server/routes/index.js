@@ -4,6 +4,7 @@ const resumeRouter = require("./resumeRoutes");
 const projectRouter = require("./projectRoutes");
 const taskRouter = require("./taskRoutes");
 const geminiRouter = require("./geminiRoutes");
+const recommendationRouter = require("./recommendationRoutes");
 const adminAuthRouter = require("./authRoutes");
 const githubRouter = require("./githubRoutes");
 const router = express.Router();
@@ -19,5 +20,6 @@ router.use("/auth", adminAuthRouter);
 router.use("/github", githubRouter);
 
 router.use("/gemini", geminiRouter);
+router.use("/recommendations", recommendationRouter);
 
 module.exports = router;
