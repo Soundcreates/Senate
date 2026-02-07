@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Plus, Clock, Users, CheckCircle2, ArrowRight, ArrowLeft, DollarSign, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getRecommendations } from '../Apis/recommendationApi';
+import { generateTitle as generateTitleApi, splitTasks as splitTasksApi } from '../Apis/geminiApi';
 import { createFullProject } from '../Apis/projectApis';
 
 // Fallback recommended people if RAG fails
@@ -74,52 +75,23 @@ const Admin = () => {
 
   const generateTitle = async (prompt) => {
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `Generate a professional, concise project title (max 5 words) for this request: "${prompt}". Return ONLY the title text. No quotes.`
-              }]
-            }]
-          })
-        }
-      );
-      const data = await response.json();
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return data.candidates[0].content.parts[0].text.trim();
+      const result = await generateTitleApi({ prompt });
+      if (result.ok && result.data?.title) {
+        return result.data.title.trim();
       }
-      return prompt; // Fallback
+      return prompt;
     } catch (e) { return prompt; }
   };
 
   const splitIntoTasks = async (prompt) => {
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `Break down this project into ${teamSize + 1} tasks. Return ONLY JSON array:
+      const formattedPrompt = `Break down this project into ${teamSize + 1} tasks. Return ONLY JSON array:
 [{"id": 1, "title": "Task", "description": "Description", "priority": "High|Medium|Low", "estimatedHours": number}]
-Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
-              }]
-            }]
-          })
-        }
-      );
-      const data = await response.json();
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        let text = data.candidates[0].content.parts[0].text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        return JSON.parse(text);
+Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`;
+
+      const result = await splitTasksApi({ prompt: formattedPrompt });
+      if (result.ok && Array.isArray(result.data?.tasks)) {
+        return result.data.tasks;
       }
       return [];
     } catch (e) { return []; }
