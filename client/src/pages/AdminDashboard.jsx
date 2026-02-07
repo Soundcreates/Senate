@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -7,43 +7,50 @@ import {
     Star, DollarSign, Calendar, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-
-// Mock data
-const stats = [
-    { label: 'Total Projects', value: 12, icon: FolderGit2, change: '+3 this month', color: '#a9927d' },
-    { label: 'Active Team', value: 8, icon: Users, change: '2 pending', color: '#5e503f' },
-    { label: 'Pending Payments', value: '$4,250', icon: Wallet, change: '3 invoices', color: '#dc2626' },
-    { label: 'Total Revenue', value: '$28,400', icon: TrendingUp, change: '+12% vs last', color: '#16a34a' },
-];
-
-const projects = [
-    { id: 1, name: 'NFT Marketplace', status: 'Active', team: ['👩‍💻', '👨‍💻', '🎨'], budget: '$15,000', progress: 65, dueDate: 'Feb 28' },
-    { id: 2, name: 'DAO Voting Tool', status: 'Active', team: ['👨‍💻', '🧠'], budget: '$8,500', progress: 40, dueDate: 'Mar 15' },
-    { id: 3, name: 'DeFi Dashboard', status: 'Completed', team: ['👩‍💻', '🎨', '⚙️'], budget: '$12,000', progress: 100, dueDate: 'Feb 1' },
-    { id: 4, name: 'Mobile Wallet App', status: 'Pending', team: ['👨‍💻'], budget: '$6,000', progress: 0, dueDate: 'Mar 20' },
-];
-
-const teamMembers = [
-    { id: 1, name: 'Alice Chen', role: 'Full-Stack', avatar: '👩‍💻', rating: 4.9, projects: 5, earned: '$4,200' },
-    { id: 2, name: 'Bob Kumar', role: 'Blockchain', avatar: '👨‍💻', rating: 4.8, projects: 4, earned: '$3,800' },
-    { id: 3, name: 'Charlie Park', role: 'UI/UX', avatar: '🎨', rating: 4.7, projects: 6, earned: '$2,900' },
-    { id: 4, name: 'Diana Patel', role: 'AI/ML', avatar: '🧠', rating: 5.0, projects: 3, earned: '$5,100' },
-];
-
-const payments = [
-    { id: 1, project: 'NFT Marketplace', amount: '$2,500', status: 'Pending', date: 'Feb 10', recipient: 'Alice Chen' },
-    { id: 2, project: 'DAO Voting Tool', amount: '$1,750', status: 'Pending', date: 'Feb 12', recipient: 'Bob Kumar' },
-    { id: 3, project: 'DeFi Dashboard', amount: '$3,000', status: 'Completed', date: 'Feb 1', recipient: 'Charlie Park' },
-];
+import { fetchAdminDashboard } from '../Apis/adminDashboardApi';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { logout, token, user } = useAuth();
+    const [stats, setStats] = useState([]);
+    const [projects, setProjects] = useState([]);
+    const [teamMembers, setTeamMembers] = useState([]);
+    const [payments, setPayments] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
     const handleLogout = async () => {
         await logout();
         navigate("/login");
     }
+
+    useEffect(() => {
+        if (user && user.role && user.role !== 'admin') {
+            navigate('/dashboard');
+            return;
+        }
+        if (!token) {
+            navigate('/login');
+            return;
+        }
+
+        const loadDashboard = async () => {
+            setIsLoading(true);
+            setLoadError(null);
+            const result = await fetchAdminDashboard(token);
+            if (result.ok && result.data) {
+                setStats(result.data.stats || []);
+                setProjects(result.data.projects || []);
+                setTeamMembers(result.data.teamMembers || []);
+                setPayments(result.data.payments || []);
+            } else {
+                setLoadError(result.error || 'admin_dashboard_failed');
+            }
+            setIsLoading(false);
+        };
+
+        loadDashboard();
+    }, [navigate, token, user]);
     const getStatusColor = (status) => {
         switch (status) {
             case 'Active': return { bg: 'rgba(22, 163, 74, 0.1)', text: '#16a34a' };
@@ -130,15 +137,28 @@ const AdminDashboard = () => {
                                 style={{ background: 'white', borderRadius: '14px', padding: '20px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                                     <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: `${stat.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <stat.icon size={20} style={{ color: stat.color }} />
+                                        {stat.label === 'Total Projects' && <FolderGit2 size={20} style={{ color: stat.color }} />}
+                                        {stat.label === 'Active Team' && <Users size={20} style={{ color: stat.color }} />}
+                                        {stat.label === 'Pending Payments' && <Wallet size={20} style={{ color: stat.color }} />}
+                                        {stat.label === 'Total Revenue' && <TrendingUp size={20} style={{ color: stat.color }} />}
                                     </div>
                                     <ArrowUpRight size={16} style={{ color: '#a9927d' }} />
                                 </div>
                                 <p style={{ fontSize: '26px', fontWeight: '600', color: '#2d2a26', margin: '0 0 4px' }}>{stat.value}</p>
                                 <p style={{ fontSize: '13px', color: '#5e503f', margin: 0 }}>{stat.label}</p>
-                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>{stat.change}</p>
+                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>{stat.change || '—'}</p>
                             </motion.div>
                         ))}
+                    </div>
+                )}
+
+                {isLoading && (
+                    <div style={{ padding: '24px 0', color: '#a9927d', fontSize: '14px' }}>Loading dashboard data...</div>
+                )}
+
+                {!isLoading && loadError && (
+                    <div style={{ padding: '16px 18px', background: 'rgba(220, 38, 38, 0.08)', color: '#dc2626', borderRadius: '10px', marginBottom: '20px' }}>
+                        Failed to load admin dashboard: {loadError}
                     </div>
                 )}
 
@@ -158,7 +178,7 @@ const AdminDashboard = () => {
                                     <div key={project.id} onClick={() => navigate(`/project/${project.id}`)} style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: i < projects.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(169, 146, 125, 0.05)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                                         <div style={{ flex: 1 }}>
                                             <p style={{ fontSize: '14px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{project.name}</p>
-                                            <p style={{ fontSize: '12px', color: '#a9927d', margin: '2px 0 0' }}>Due: {project.dueDate}</p>
+                                            <p style={{ fontSize: '12px', color: '#a9927d', margin: '2px 0 0' }}>Due: {project.dueDate || '—'}</p>
                                         </div>
                                         <div style={{ display: 'flex', marginRight: '20px' }}>
                                             {project.team.map((t, j) => (
@@ -198,9 +218,9 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#5e503f' }}>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Star size={12} style={{ color: '#f59e0b' }} /> {member.rating}</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Star size={12} style={{ color: '#f59e0b' }} /> {member.rating ?? '—'}</span>
                                         <span>{member.projects} projects</span>
-                                        <span style={{ fontWeight: '600', color: '#16a34a' }}>{member.earned}</span>
+                                        <span style={{ fontWeight: '600', color: '#16a34a' }}>{member.earned || '$0'}</span>
                                     </div>
                                 </motion.div>
                             ))}

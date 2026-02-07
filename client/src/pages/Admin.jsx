@@ -784,8 +784,8 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`;
                   }));
 
                   const result = await createFullProject({
-                    name: projectTitle || projectDescription,
-                    description: projectDescription,
+                    name: projectDescription,
+                    description: projectTitle || projectDescription,
                     budget,
                     deadline,
                     teamSize,
