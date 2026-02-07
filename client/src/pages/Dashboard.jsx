@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
-import { MoreHorizontal, Plus, Clock, CheckCircle2, AlertCircle, User } from 'lucide-react';
+import { MoreHorizontal, Plus, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const TASKS = [
@@ -24,7 +24,7 @@ const PRODUCTIVITY_DATA = [
 ];
 const Dashboard = () => {
   const containerRef = useRef(null);
-  const {fetchUserProfile,user} = useAuth();
+  const { fetchUserProfile, user } = useAuth();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -62,17 +62,23 @@ const Dashboard = () => {
       });
     }, containerRef);
     const fetchData = async () => {
-       await fetchUserProfile();
-      
-    }
+      await fetchUserProfile();
+    };
     fetchData();
 
     return () => ctx.revert();
   }, []);
 
-  useEffect(() => {
-    console.log("User data: ", user);
-  },[]);
+  const profileEntries = user
+    ? [
+        { label: 'Name', value: user.name || '—' },
+        { label: 'Email', value: user.email || '—' },
+        { label: 'Provider', value: user.provider || '—' },
+        { label: 'GitHub Connected', value: user.githubConnected ? 'Yes' : 'No' },
+        { label: 'WakaTime Connected', value: user.wakatimeConnected ? 'Yes' : 'No' },
+        { label: 'Resume URL', value: user.resume || '—' },
+      ]
+    : [];
 
   return (
     <div ref={containerRef} className="p-8 min-h-screen bg-zinc-950 text-white ml-64 overflow-hidden">
@@ -91,6 +97,41 @@ const Dashboard = () => {
             <Plus size={18} /> New Task
           </button>
         </div>
+      </div>
+
+      {/* Profile Snapshot */}
+      <div className="stat-card bg-zinc-900/50 backdrop-blur-md border border-zinc-800 p-6 rounded-2xl shadow-xl mb-8">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-zinc-400 text-sm">NA</span>
+            )}
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-white">Profile Snapshot</h2>
+            <p className="text-sm text-zinc-400">Data loaded after registration and GitHub connect.</p>
+          </div>
+        </div>
+        {user ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {profileEntries.map((entry) => (
+                <div key={entry.label} className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
+                  <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">{entry.label}</p>
+                  <p className="text-sm text-zinc-200 break-words">{entry.value}</p>
+                </div>
+              ))}
+            </div>
+            <details className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
+              <summary className="cursor-pointer text-sm text-zinc-300">Raw user JSON</summary>
+              <pre className="mt-3 text-xs text-zinc-400 whitespace-pre-wrap">{JSON.stringify(user, null, 2)}</pre>
+            </details>
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-400">No user data loaded yet.</p>
+        )}
       </div>
 
       {/* Stats Row */}

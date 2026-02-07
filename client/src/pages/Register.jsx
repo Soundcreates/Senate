@@ -5,7 +5,7 @@ import { gsap } from 'gsap';
 import { useAuth } from '../context/AuthContext';
 import { startGithubLogin } from '@/Apis/github-authApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
-import { useWallet } from '../hooks/useWeb3';
+import { uploadResume } from '@/Apis/resumeApi';
 
 const Register = () => {
     const containerRef = useRef(null);
@@ -15,10 +15,12 @@ const Register = () => {
     const [manualEmailError, setManualEmailError] = useState('');
     const [wakatimeConnected, setWakatimeConnected] = useState(false);
     const [githubConnected, setGithubConnected] = useState(false);
+    const [resumeFile, setResumeFile] = useState(null);
+    const [resumeError, setResumeError] = useState('');
+    const [isUploadingResume, setIsUploadingResume] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser } = useAuth();
-    const { account, isConnected, isConnecting, connectWallet } = useWallet();
   
     useEffect(() => {
       const ctx = gsap.context(() => {
@@ -44,7 +46,7 @@ const Register = () => {
     }, [step]);
   
     const handleWakatimeConnect = () => {
-        startWakatimeOAuth();
+        startWakatimeOAuth("register");
     };
 
     const handleGithubConnect = () => {
@@ -66,11 +68,24 @@ const Register = () => {
         setStep(3);
     };
 
-    const handleWalletConnect = async () => {
-        await connectWallet();
+    const handleResumeUpload = (event) => {
+        const file = event.target.files?.[0];
+        setResumeFile(file || null);
+        setResumeError('');
     };
 
-    const handleCompleteRegistration = () => {
+    const handleCompleteRegistration = async () => {
+        if (!resumeFile || isUploadingResume) return;
+        setResumeError('');
+        setIsUploadingResume(true);
+
+        const result = await uploadResume(resumeFile);
+        if (!result.ok) {
+            setResumeError('Resume upload failed. Please try again.');
+            setIsUploadingResume(false);
+            return;
+        }
+
         navigate('/dashboard');
     };
 
@@ -96,7 +111,7 @@ const Register = () => {
                     setStep(2);
                 }
                 if (provider === 'github') {
-                    navigate('/dashboard');
+                    setStep(4);
                 }
                 // Clean up URL
                 const newUrl = window.location.pathname;
@@ -126,7 +141,7 @@ const Register = () => {
               Create Account
             </h1>
             <p className="text-zinc-400 text-base">
-                Step {step} of 4: {step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect Wallet' : 'Connect GitHub'}
+                Step {step} of 4: {step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}
             </p>
           </div>
   
@@ -179,55 +194,11 @@ const Register = () => {
                 </div>
             )}
 
-            {/* Step 3: Wallet */}
+            {/* Step 3: GitHub */}
             {step === 3 && (
                 <div className="space-y-5">
                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
                         <span className="text-sm text-zinc-300">✓ Email Confirmed</span>
-                    </div>
-
-                    {!isConnected ? (
-                        <>
-                            <button 
-                                onClick={handleWalletConnect}
-                                disabled={isConnecting}
-                                className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <div className="text-lg font-semibold mb-1">
-                                    {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-                                </div>
-                                <div className="text-sm text-zinc-300">MetaMask or compatible wallet</div>
-                            </button>
-                            <p className="text-sm text-center text-zinc-400 leading-relaxed">
-                                We'll use your wallet address to enable blockchain features and interactions.
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <div className="bg-zinc-600 rounded-xl p-5 space-y-2">
-                                <div className="text-center">
-                                    <span className="text-sm text-zinc-300 font-medium">✓ Wallet Connected</span>
-                                </div>
-                                <p className="text-xs text-zinc-400 text-center font-mono">
-                                    {account?.slice(0, 6)}...{account?.slice(-4)}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setStep(4)}
-                                className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all"
-                            >
-                                Continue to GitHub
-                            </button>
-                        </>
-                    )}
-                </div>
-            )}
-
-            {/* Step 4: GitHub */}
-            {step === 4 && (
-                <div className="space-y-5">
-                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                        <span className="text-sm text-zinc-300">✓ Wallet Connected</span>
                     </div>
 
                     <button 
@@ -237,9 +208,45 @@ const Register = () => {
                         <div className="text-lg font-semibold mb-1">Connect GitHub</div>
                         <div className="text-sm text-zinc-300">Import repositories & contributions</div>
                     </button>
+                    {githubConnected && (
+                        <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                            <span className="text-sm text-zinc-300">✓ GitHub Connected</span>
+                        </div>
+                    )}
                     <p className="text-sm text-center text-zinc-400 leading-relaxed">
-                        Final step! Connect GitHub to analyze your code contributions and projects.
+                        Final step before resume upload. Connect GitHub to analyze your contributions.
                     </p>
+                </div>
+            )}
+
+            {/* Step 4: Resume */}
+            {step === 4 && (
+                <div className="space-y-5">
+                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                        <span className="text-sm text-zinc-300">✓ GitHub Connected</span>
+                    </div>
+                    <div className="border-2 border-dashed border-zinc-500 rounded-xl p-6 text-center bg-zinc-600/40">
+                        <input
+                            type="file"
+                            className="hidden"
+                            id="resume-upload"
+                            onChange={handleResumeUpload}
+                            accept="application/pdf"
+                        />
+                        <label htmlFor="resume-upload" className="cursor-pointer text-zinc-300">
+                            {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
+                        </label>
+                    </div>
+                    {resumeError && (
+                        <p className="text-sm text-red-400 text-center">{resumeError}</p>
+                    )}
+                    <button
+                        onClick={handleCompleteRegistration}
+                        disabled={!resumeFile || isUploadingResume}
+                        className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isUploadingResume ? 'Uploading...' : 'Complete Registration'}
+                    </button>
                 </div>
             )}
           </div>

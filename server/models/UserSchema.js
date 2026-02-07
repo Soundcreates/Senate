@@ -21,6 +21,7 @@ const UserSchema = new mongoose.Schema(
     wakatimeTokens: { type: TokenSchema, default: () => ({}) },
     githubTokens: { type: TokenSchema, default: () => ({}) },
     resume: {type: String, default: null},
+    walletAddress: {type: String , default: null}
   },
   { timestamps: true }
 );
