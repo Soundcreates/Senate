@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from computeDailyScore import compute_daily_score
-from computeElo import update_ratings_after_completion
-from models import (
+from server.computeDailyScore import compute_daily_score
+from server.computeElo import update_ratings_after_completion
+from server.models import (
     DailyScoreRequest,
     DailyScoreResponse,
     ELOUpdateRequest,
