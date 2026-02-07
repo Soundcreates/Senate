@@ -316,4 +316,47 @@ const getHistoryActivity = async (req, res) => {
 	}
 };
 
-module.exports = { createProject, createFullProject, getProjectById, listProjects, getTodayActivity, getHistoryActivity };
+/**
+ * Link an on-chain escrow contract to a project
+ */
+const linkEscrow = async (req, res) => {
+	try {
+		const sessionUser = await getSessionUser(req);
+		if (!sessionUser) {
+			return res.status(401).json({ error: "no_session" });
+		}
+
+		const { escrowAddress, txHash, chainId } = req.body;
+		if (!escrowAddress || !txHash) {
+			return res.status(400).json({ error: "escrow_address_and_tx_required" });
+		}
+
+		// Validate address format
+		if (!/^0x[a-fA-F0-9]{40}$/.test(escrowAddress)) {
+			return res.status(400).json({ error: "invalid_escrow_address" });
+		}
+
+		const project = await Project.findById(req.params.projectId);
+		if (!project) {
+			return res.status(404).json({ error: "project_not_found" });
+		}
+
+		// Only project creator can link escrow
+		if (project.createdBy.toString() !== sessionUser._id.toString()) {
+			return res.status(403).json({ error: "only_creator_can_link_escrow" });
+		}
+
+		project.escrowAddress = escrowAddress;
+		project.escrowTxHash = txHash;
+		project.escrowChainId = chainId || 11155111; // default Sepolia
+		await project.save();
+
+		console.log(`[Project] Escrow linked: ${escrowAddress} -> project ${project.name}`);
+		return res.status(200).json({ ok: true, project });
+	} catch (error) {
+		console.error("Link escrow failed:", { message: error.message });
+		return res.status(500).json({ error: "link_escrow_failed" });
+	}
+};
+
+module.exports = { createProject, createFullProject, getProjectById, listProjects, getTodayActivity, getHistoryActivity, linkEscrow };

@@ -4,10 +4,13 @@ import { motion } from 'framer-motion';
 import {
     LayoutDashboard, FolderGit2, Users, Wallet, TrendingUp,
     Clock, CheckCircle2, AlertCircle, ArrowUpRight, MoreHorizontal,
-    Star, DollarSign, Calendar, ChevronRight
+    Star, DollarSign, Calendar, ChevronRight, Shield, ExternalLink, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { fetchAdminDashboard } from '../Apis/adminDashboardApi';
+import { useWalletContext } from '../context/WalletContext';
+import { getAllEscrows, getEscrowData, MilestoneStatusLabels, MilestoneStatusColors } from '../Apis/escrowApi';
+import { getOracleStatus } from '../Apis/oracleApi';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
@@ -19,6 +22,14 @@ const AdminDashboard = () => {
     const [payments, setPayments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
+
+    // Blockchain escrow state
+    const { isConnected, connect: connectWallet, shortenAddress: shorten, getExplorerUrl } = useWalletContext();
+    const [escrowList, setEscrowList] = useState([]);
+    const [escrowDetails, setEscrowDetails] = useState({});
+    const [escrowsLoading, setEscrowsLoading] = useState(false);
+    const [oracleInfo, setOracleInfo] = useState(null);
+
     const handleLogout = async () => {
         await logout();
         navigate("/login");
@@ -51,6 +62,36 @@ const AdminDashboard = () => {
 
         loadDashboard();
     }, [navigate, token, user]);
+
+    // Load on-chain escrow data when escrows tab is selected
+    useEffect(() => {
+        if (activeTab !== 'escrows') return;
+        let cancelled = false;
+        const loadEscrows = async () => {
+            setEscrowsLoading(true);
+            try {
+                const [addresses, oracleRes] = await Promise.all([getAllEscrows(), getOracleStatus()]);
+                if (cancelled) return;
+                setEscrowList(addresses || []);
+                setOracleInfo(oracleRes);
+                // Load details for each (max 10 for perf)
+                const details = {};
+                for (const addr of (addresses || []).slice(0, 10)) {
+                    try {
+                        details[addr] = await getEscrowData(addr);
+                    } catch (_) { /* skip failed */ }
+                }
+                if (!cancelled) setEscrowDetails(details);
+            } catch (err) {
+                console.error('Escrow load failed:', err);
+            } finally {
+                if (!cancelled) setEscrowsLoading(false);
+            }
+        };
+        loadEscrows();
+        return () => { cancelled = true; };
+    }, [activeTab]);
+
     const getStatusColor = (status) => {
         switch (status) {
             case 'Active': return { bg: 'rgba(22, 163, 74, 0.1)', text: '#16a34a' };
@@ -77,6 +118,7 @@ const AdminDashboard = () => {
                         { id: 'projects', label: 'Projects', icon: FolderGit2 },
                         { id: 'team', label: 'Team', icon: Users },
                         { id: 'payments', label: 'Payments', icon: Wallet },
+                        { id: 'escrows', label: 'Escrows', icon: Shield },
                     ].map(item => (
                         <button key={item.id} onClick={() => setActiveTab(item.id)}
                             style={{
@@ -252,6 +294,95 @@ const AdminDashboard = () => {
                                     </div>
                                 );
                             })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Escrows Section */}
+                {activeTab === 'escrows' && (
+                    <div>
+                        {/* Oracle Status Card */}
+                        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', padding: '20px', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Shield size={18} style={{ color: '#a9927d' }} /> Oracle Status
+                            </h3>
+                            {oracleInfo ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: oracleInfo.configured ? '#16a34a' : '#dc2626' }} />
+                                        <span style={{ fontSize: '13px', color: '#5e503f' }}>{oracleInfo.configured ? 'Configured' : 'Not Configured'}</span>
+                                    </div>
+                                    {oracleInfo.oracle && (
+                                        <span style={{ fontSize: '12px', fontFamily: 'monospace', color: '#a9927d' }}>{oracleInfo.oracle}</span>
+                                    )}
+                                </div>
+                            ) : (
+                                <span style={{ fontSize: '13px', color: '#a9927d' }}>Loading...</span>
+                            )}
+                        </div>
+
+                        {/* Escrow Count + List */}
+                        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
+                            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(169, 146, 125, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>On-Chain Escrows ({escrowList.length})</h3>
+                                {!isConnected && (
+                                    <button onClick={connectWallet} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(169, 146, 125, 0.3)', background: 'white', color: '#5e503f', fontSize: '12px', cursor: 'pointer' }}>
+                                        Connect Wallet
+                                    </button>
+                                )}
+                            </div>
+
+                            {escrowsLoading ? (
+                                <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: '#a9927d', fontSize: '13px' }}>
+                                    <Loader2 size={16} className="animate-spin" /> Loading on-chain escrows...
+                                </div>
+                            ) : escrowList.length === 0 ? (
+                                <div style={{ padding: '20px', fontSize: '13px', color: '#a9927d' }}>
+                                    No escrows deployed yet.
+                                </div>
+                            ) : (
+                                <div style={{ padding: '8px 0' }}>
+                                    {escrowList.map((addr, i) => {
+                                        const detail = escrowDetails[addr];
+                                        const totalMilestones = detail?.milestones?.length || 0;
+                                        const finalized = detail?.milestones?.filter(m => m.status === 3).length || 0;
+                                        const inDispute = detail?.milestones?.filter(m => m.status === 2).length || 0;
+                                        return (
+                                            <div key={addr} style={{ padding: '14px 20px', borderBottom: i < escrowList.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                    <a href={getExplorerUrl(addr, 'address')} target="_blank" rel="noreferrer" style={{ fontSize: '13px', fontFamily: 'monospace', color: '#5e503f', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        {shorten(addr)} <ExternalLink size={10} />
+                                                    </a>
+                                                    {detail && (
+                                                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26' }}>${detail.totalBudget} USDC</span>
+                                                    )}
+                                                </div>
+                                                {detail && (
+                                                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
+                                                        <span style={{ color: '#5e503f' }}>{totalMilestones} milestones</span>
+                                                        <span style={{ color: '#16a34a' }}>{finalized} finalized</span>
+                                                        {inDispute > 0 && <span style={{ color: '#ea580c' }}>{inDispute} disputed</span>}
+                                                        <span style={{ color: '#a9927d' }}>{detail.contributors.length} contributors</span>
+                                                    </div>
+                                                )}
+                                                {detail?.milestones && (
+                                                    <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                                                        {detail.milestones.map((ms, j) => {
+                                                            const sc = MilestoneStatusColors[ms.status] || MilestoneStatusColors[0];
+                                                            return (
+                                                                <div key={j} title={`Milestone ${j + 1}: ${MilestoneStatusLabels[ms.status]} — $${ms.budget}`}
+                                                                    style={{ flex: 1, height: '6px', borderRadius: '3px', background: sc.bg, position: 'relative' }}>
+                                                                    <div style={{ width: ms.status === 3 ? '100%' : ms.status >= 1 ? '60%' : '0%', height: '100%', borderRadius: '3px', background: sc.text, opacity: 0.7 }} />
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

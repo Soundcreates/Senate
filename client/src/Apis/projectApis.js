@@ -153,3 +153,23 @@ export const fetchActivityHistory = async (projectId) => {
   const data = await response.json();
   return { ok: true, data };
 };
+
+/**
+ * Link an on-chain escrow contract to a project
+ */
+export const linkEscrowToProject = async (projectId, { escrowAddress, txHash, chainId }) => {
+  const response = await fetch(`${BASE_API}/api/projects/${projectId}/escrow`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ escrowAddress, txHash, chainId }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, error: data.error || "link_escrow_failed" };
+  }
+
+  const data = await response.json();
+  return { ok: true, project: data.project };
+};

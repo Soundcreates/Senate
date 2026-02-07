@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { useAuth } from '../context/AuthContext';
+import { useWalletContext } from '../context/WalletContext';
 import { startGithubLogin } from '@/Apis/github-authApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
 import { uploadResume } from '@/Apis/resumeApi';
@@ -37,9 +38,32 @@ const Register = () => {
     const [tier, setTier] = useState('junior');
     const [walletAddress, setWalletAddress] = useState('');
     const [profileError, setProfileError] = useState('');
+    const [isConnectingWallet, setIsConnectingWallet] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser, setToken } = useAuth();
+    const { account: walletAccount, isConnected: isWalletConnected, connect: connectMetaMask } = useWalletContext();
+
+    // Sync MetaMask connected address to walletAddress state
+    useEffect(() => {
+        if (walletAccount && isWalletConnected) {
+            setWalletAddress(walletAccount);
+        }
+    }, [walletAccount, isWalletConnected]);
+
+    const handleConnectWallet = async () => {
+        setIsConnectingWallet(true);
+        try {
+            const addr = await connectMetaMask();
+            if (addr) {
+                setWalletAddress(addr);
+            }
+        } catch (err) {
+            setProfileError('Failed to connect wallet. Make sure MetaMask is installed.');
+        } finally {
+            setIsConnectingWallet(false);
+        }
+    };
 
     useEffect(() => {
         const ctx = gsap.context(() => {
@@ -481,13 +505,24 @@ const Register = () => {
 
                                 <div>
                                     <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Wallet Address *</label>
-                                    <input
-                                        type="text"
-                                        value={walletAddress}
-                                        onChange={(e) => setWalletAddress(e.target.value)}
-                                        placeholder="0x..."
-                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost'] font-mono text-sm"
-                                    />
+                                    {isWalletConnected && walletAddress ? (
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1 px-4 py-3 bg-[#fbf7ef] border border-green-300 rounded-xl font-['Jost'] font-mono text-sm text-[#2d2a26] flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                                                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                                            </div>
+                                            <span className="text-xs text-green-600 font-['Jost']">Connected</span>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleConnectWallet}
+                                            disabled={isConnectingWallet}
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl hover:bg-[#f0eadd] transition-colors font-['Jost'] text-sm text-[#5e503f] disabled:opacity-50"
+                                        >
+                                            {isConnectingWallet ? 'Connecting...' : 'Connect MetaMask Wallet'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
