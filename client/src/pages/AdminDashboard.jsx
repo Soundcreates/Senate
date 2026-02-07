@@ -6,6 +6,7 @@ import {
     Clock, CheckCircle2, AlertCircle, ArrowUpRight, MoreHorizontal,
     Star, DollarSign, Calendar, ChevronRight
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 // Mock data
 const stats = [
@@ -38,7 +39,11 @@ const payments = [
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const navigate = useNavigate();
-
+    const { logout } = useAuth();
+    const handleLogout = async () => {
+        await logout();
+        navigate("/login");
+    }
     const getStatusColor = (status) => {
         switch (status) {
             case 'Active': return { bg: 'rgba(22, 163, 74, 0.1)', text: '#16a34a' };
@@ -92,13 +97,29 @@ const AdminDashboard = () => {
             {/* Main Content */}
             <div style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
                 {/* Header */}
-                <div style={{ marginBottom: '28px' }}>
-                    <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>
-                        {activeTab === 'overview' ? 'Dashboard Overview' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
-                    </h2>
-                    <p style={{ fontSize: '14px', color: '#a9927d', margin: '4px 0 0' }}>
-                        {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
+                <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>
+                            {activeTab === 'overview' ? 'Dashboard Overview' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                        </h2>
+                        <p style={{ fontSize: '14px', color: '#a9927d', margin: '4px 0 0' }}>
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        style={{
+                            border: '1px solid rgba(169, 146, 125, 0.4)',
+                            background: 'white',
+                            color: '#5e503f',
+                            borderRadius: '10px',
+                            padding: '8px 14px',
+                            fontSize: '13px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Logout
+                    </button>
                 </div>
 
                 {/* Quick Stats */}

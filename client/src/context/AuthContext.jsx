@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 import { fetchAdminProfile, logoutAdmin } from '@/Apis/admin-authApi';
-
+import { useNavigate } from 'react-router-dom';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUserState] = useState(() => {
+    
     try {
       const raw = localStorage.getItem('auth.user');
       return raw ? JSON.parse(raw) : null;

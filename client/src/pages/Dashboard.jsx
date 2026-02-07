@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { MoreHorizontal, Plus, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import AdminDashboard from './AdminDashboard';
+import { useNavigate } from 'react-router-dom';
 
 const TASKS = [
   { id: 1, title: 'Implement Authentication', status: 'In Progress', priority: 'High', assignee: 'Sarah Chen' },
@@ -26,7 +27,7 @@ const PRODUCTIVITY_DATA = [
 const Dashboard = () => {
   const containerRef = useRef(null);
   const { fetchUserProfile, user, logout } = useAuth();
-
+  const navigate = useNavigate();
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.dashboard-header', {
@@ -83,6 +84,11 @@ const Dashboard = () => {
     if(user.role === "admin"){
        return <AdminDashboard />
     }
+
+    const handleLogout = async () => {
+      await logout();
+      navigate('/login');
+    }
   return (
     <div ref={containerRef} className="p-8 min-h-screen bg-zinc-950 text-white ml-64 overflow-hidden">
       <div className="dashboard-header flex justify-between items-end mb-8">
@@ -94,7 +100,7 @@ const Dashboard = () => {
         </div>
         <div className="flex gap-4">
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="bg-zinc-800 text-white px-4 py-2 rounded-xl hover:bg-zinc-700 transition-colors"
           >
             Logout
