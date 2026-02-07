@@ -1,301 +1,244 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, CheckCircle2, List } from 'lucide-react';
-import { gsap } from 'gsap';
+import React, { useState } from 'react';
+import { Send, Loader2, Plus, Clock, Users, CheckCircle2, ArrowRight, ArrowLeft, DollarSign, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Hardcoded recommended people
+const recommendedPeople = [
+  { id: 1, name: 'Alice Chen', role: 'Full-Stack', match: 92, avatar: '👩‍💻' },
+  { id: 2, name: 'Bob Kumar', role: 'Blockchain', match: 88, avatar: '👨‍💻' },
+  { id: 3, name: 'Charlie Park', role: 'UI/UX', match: 90, avatar: '🎨' },
+  { id: 4, name: 'Diana Patel', role: 'AI/ML', match: 85, avatar: '🧠' },
+  { id: 5, name: 'Ethan Lee', role: 'DevOps', match: 82, avatar: '⚙️' },
+];
+
+const budgetOptions = [
+  { label: '$1K-5K', value: '1k-5k' },
+  { label: '$5K-15K', value: '5k-15k' },
+  { label: '$15K-50K', value: '15k-50k' },
+  { label: '$50K+', value: '50k+' },
+];
 
 const Admin = () => {
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState([]);
+  const [step, setStep] = useState(1);
+  const [projectDescription, setProjectDescription] = useState('');
+  const [budget, setBudget] = useState('');
+  const [teamSize, setTeamSize] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
   const [tasks, setTasks] = useState([]);
-  const messagesEndRef = useRef(null);
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.from('.admin-header', {
-        y: -30,
-        opacity: 0,
-        duration: 0.8,
-        ease: 'power3.out',
-      });
-
-      gsap.from('.chat-container', {
-        scale: 0.95,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.2,
-        ease: 'power3.out',
-      });
-    }, containerRef);
-
-    return () => ctx.revert();
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const [taskAssignments, setTaskAssignments] = useState({}); // { taskId: [person1, person2, ...] }
+  const [draggedPerson, setDraggedPerson] = useState(null);
 
   const splitIntoTasks = async (prompt) => {
     try {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': apiKey,
-          },
+          headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `You are a project management assistant. Break down the following project request into a clear, actionable list of tasks. Return ONLY a JSON array of task objects with this exact format:
-[
-  {
-    "id": 1,
-    "title": "Task title",
-    "description": "Brief description",
-    "priority": "High|Medium|Low",
-    "estimatedHours": number
-  }
-]
-
-Project request: "${prompt}"
-
-Important: Return ONLY the JSON array, no additional text or markdown formatting.`
+                text: `Break down this project into ${teamSize + 1} tasks. Return ONLY JSON array:
+[{"id": 1, "title": "Task", "description": "Description", "priority": "High|Medium|Low", "estimatedHours": number}]
+Project: "${prompt}". Return ONLY JSON.`
               }]
             }]
           })
         }
       );
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Gemini API error:', errorData);
-        throw new Error('Failed to process request with AI service');
-      }
-
       const data = await response.json();
-      
-      if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-        let responseText = data.candidates[0].content.parts[0].text.trim();
-        
-        // Remove markdown code blocks if present
-        responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        
-        const parsedTasks = JSON.parse(responseText);
-        return parsedTasks;
+      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        let text = data.candidates[0].content.parts[0].text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        return JSON.parse(text);
       }
-      
-      throw new Error('Invalid response format from AI service');
-    } catch (error) {
-      console.error('Error splitting tasks:', error);
-      throw error;
-    }
+      return [];
+    } catch (e) { return []; }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userMessage = {
-      role: 'user',
-      content: input,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
+  const handleStep1Submit = (e) => { e.preventDefault(); if (projectDescription.trim()) setStep(2); };
+  const handleStep2Submit = () => { if (budget) setStep(3); };
+  const handleStep3Submit = async () => {
+    setStep(4);
     setIsLoading(true);
+    const generatedTasks = await splitIntoTasks(projectDescription);
+    setTasks(generatedTasks);
+    // Initialize empty arrays for each task
+    const initial = {};
+    generatedTasks.forEach(t => initial[t.id] = []);
+    setTaskAssignments(initial);
+    setIsLoading(false);
+  };
 
-    try {
-      const generatedTasks = await splitIntoTasks(input);
-      
-      const assistantMessage = {
-        role: 'assistant',
-        content: `I've broken down your project into ${generatedTasks.length} actionable tasks:`,
-        tasks: generatedTasks,
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      setTasks(generatedTasks);
-
-      // Animate tasks appearing
-      setTimeout(() => {
-        gsap.from('.task-item', {
-          x: -20,
-          opacity: 0,
-          duration: 0.4,
-          stagger: 0.1,
-          ease: 'power2.out',
-        });
-      }, 100);
-    } catch (error) {
-      const errorMessage = {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error processing your request. Please try again.',
-        timestamp: new Date().toISOString(),
-        isError: true,
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+  const handleDragStart = (person) => setDraggedPerson(person);
+  const handleDragOver = (e) => e.preventDefault();
+  const handleDrop = (taskId) => {
+    if (draggedPerson) {
+      setTaskAssignments(prev => {
+        const current = prev[taskId] || [];
+        // Allow same person on multiple tasks, but not duplicate on same task
+        if (!current.find(p => p.id === draggedPerson.id)) {
+          return { ...prev, [taskId]: [...current, draggedPerson] };
+        }
+        return prev;
+      });
+      setDraggedPerson(null);
     }
   };
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'High':
-        return 'bg-red-500/10 text-red-400 border-red-500/20';
-      case 'Medium':
-        return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
-      case 'Low':
-        return 'bg-green-500/10 text-green-400 border-green-500/20';
-      default:
-        return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
-    }
+  const removeFromTask = (taskId, personId) => {
+    setTaskAssignments(prev => ({
+      ...prev,
+      [taskId]: (prev[taskId] || []).filter(p => p.id !== personId)
+    }));
   };
+
+  const getPriorityColor = (p) => {
+    if (p === 'High') return '#dc2626';
+    if (p === 'Medium') return '#ea580c';
+    return '#16a34a';
+  };
+
+  const selectedTeam = recommendedPeople.slice(0, teamSize);
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-zinc-950 text-white flex flex-col">
-      {/* Header */}
-      <div className="admin-header border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
-            Project Builder
-          </h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Describe your project and I'll break it down into actionable tasks
-          </p>
-        </div>
-      </div>
+    <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif", display: 'flex', flexDirection: 'column' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Jost:wght@300;400;500;600&display=swap');`}</style>
 
-      {/* Chat Container */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          {messages.length === 0 ? (
-            <div className="chat-container flex flex-col items-center justify-center h-[60vh]">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20">
-                <List size={32} />
-              </div>
-              <h2 className="text-3xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
-                What do you want to build today?
-              </h2>
-              <p className="text-zinc-400 text-center max-w-md">
-                Describe your project idea and I'll help you break it down into manageable tasks
-              </p>
+      {/* Step 1: Project */}
+      {step === 1 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            style={{ fontFamily: "'Playfair Display', serif", fontSize: '42px', fontWeight: '500', color: '#2d2a26', marginBottom: '32px' }}>
+            Build Anything.
+          </motion.h1>
+          <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            onSubmit={handleStep1Submit} style={{ width: '100%', maxWidth: '520px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', background: '#fff', borderRadius: '24px', border: '1px solid rgba(169,146,125,0.3)', padding: '5px 5px 5px 14px', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+              <Plus size={18} style={{ color: '#a9927d', marginRight: '10px' }} />
+              <input type="text" value={projectDescription} onChange={(e) => setProjectDescription(e.target.value)}
+                placeholder="Describe your project..." style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: '15px', color: '#2d2a26' }} />
+              <button type="submit" disabled={!projectDescription.trim()}
+                style={{ width: '36px', height: '36px', borderRadius: '50%', border: 'none', background: projectDescription.trim() ? '#a9927d' : 'rgba(169,146,125,0.3)', color: 'white', cursor: projectDescription.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </motion.form>
+        </div>
+      )}
+
+      {/* Step 2: Budget */}
+      {step === 2 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <DollarSign size={36} style={{ color: '#a9927d', marginBottom: '12px' }} />
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Budget?</h2>
+          <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '24px' }}>Select your project budget range</p>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
+            {budgetOptions.map((opt) => (
+              <button key={opt.value} onClick={() => setBudget(opt.value)}
+                style={{ padding: '10px 20px', borderRadius: '20px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: budget === opt.value ? '#a9927d' : 'white', color: budget === opt.value ? 'white' : '#2d2a26', border: budget === opt.value ? 'none' : '1px solid rgba(169,146,125,0.3)' }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setStep(1)} style={{ padding: '10px 20px', borderRadius: '20px', border: '1px solid rgba(169,146,125,0.3)', background: 'white', color: '#2d2a26', fontSize: '14px', cursor: 'pointer' }}><ArrowLeft size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Back</button>
+            <button onClick={handleStep2Submit} disabled={!budget} style={{ padding: '10px 20px', borderRadius: '20px', border: 'none', background: budget ? '#a9927d' : 'rgba(169,146,125,0.3)', color: 'white', fontSize: '14px', fontWeight: '600', cursor: budget ? 'pointer' : 'not-allowed' }}>Continue <ArrowRight size={14} style={{ marginLeft: '4px', verticalAlign: 'middle' }} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Team Size */}
+      {step === 3 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <Users size={36} style={{ color: '#a9927d', marginBottom: '12px' }} />
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Team Size?</h2>
+          <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '24px' }}>How many people on your team?</p>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
+            {[2, 3, 4, 5].map((s) => (
+              <button key={s} onClick={() => setTeamSize(s)}
+                style={{ width: '48px', height: '48px', borderRadius: '50%', fontSize: '18px', fontWeight: '600', cursor: 'pointer', background: teamSize === s ? '#a9927d' : 'white', color: teamSize === s ? 'white' : '#2d2a26', border: teamSize === s ? 'none' : '1px solid rgba(169,146,125,0.3)' }}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setStep(2)} style={{ padding: '10px 20px', borderRadius: '20px', border: '1px solid rgba(169,146,125,0.3)', background: 'white', color: '#2d2a26', fontSize: '14px', cursor: 'pointer' }}><ArrowLeft size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Back</button>
+            <button onClick={handleStep3Submit} style={{ padding: '10px 20px', borderRadius: '20px', border: 'none', background: '#a9927d', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Generate <ArrowRight size={14} style={{ marginLeft: '4px', verticalAlign: 'middle' }} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Assignment */}
+      {step === 4 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px' }}>
+          {isLoading ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <Loader2 className="animate-spin" size={24} style={{ color: '#a9927d' }} />
+              <span style={{ color: '#a9927d' }}>Generating...</span>
             </div>
           ) : (
-            <div className="space-y-6">
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-3xl ${
-                      message.role === 'user'
-                        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm'
-                        : 'bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm'
-                    } px-6 py-4 shadow-lg`}
-                  >
-                    <p className={`${message.isError ? 'text-red-400' : ''}`}>
-                      {message.content}
-                    </p>
-                    
-                    {message.tasks && message.tasks.length > 0 && (
-                      <div className="mt-6 space-y-3">
-                        {message.tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="task-item bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors"
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-medium text-zinc-400">
-                                  {task.id}
-                                </div>
-                                <h3 className="font-semibold text-white">{task.title}</h3>
-                              </div>
-                              <span
-                                className={`text-xs px-2 py-1 rounded-md border font-medium ${getPriorityColor(
-                                  task.priority
-                                )}`}
-                              >
-                                {task.priority}
-                              </span>
-                            </div>
-                            <p className="text-sm text-zinc-400 ml-9 mb-2">
-                              {task.description}
-                            </p>
-                            <div className="flex items-center gap-4 ml-9 text-xs text-zinc-500">
-                              <span className="flex items-center gap-1">
-                                <CheckCircle2 size={14} />
-                                Est. {task.estimatedHours}h
-                              </span>
-                            </div>
-                          </div>
-                        ))}
+            <>
+              {/* Header */}
+              <div style={{ marginBottom: '20px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '22px', color: '#2d2a26', margin: 0 }}>{projectDescription}</h2>
+                <p style={{ fontSize: '13px', color: '#a9927d', margin: '4px 0 0' }}>Drag team members to tasks • One person can do multiple tasks</p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
+                {/* Tasks */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {tasks.map((task) => (
+                    <div key={task.id} onDragOver={handleDragOver} onDrop={() => handleDrop(task.id)}
+                      style={{ background: 'white', border: '1px solid rgba(169,146,125,0.15)', borderRadius: '12px', padding: '12px 14px', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#a9927d', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600' }}>{task.id}</span>
+                        <span style={{ fontWeight: '600', color: '#2d2a26', fontSize: '14px', flex: 1 }}>{task.title}</span>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(169,146,125,0.1)', color: getPriorityColor(task.priority), fontWeight: '600' }}>{task.priority}</span>
                       </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl rounded-tl-sm px-6 py-4 shadow-lg">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="animate-spin text-indigo-400" size={20} />
-                      <span className="text-zinc-400">Analyzing your project...</span>
+                      <p style={{ fontSize: '12px', color: '#5e503f', margin: '0 0 8px 30px' }}>{task.description}</p>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginLeft: '30px', minHeight: '28px' }}>
+                        {(taskAssignments[task.id] || []).map(p => (
+                          <span key={p.id} onClick={() => removeFromTask(task.id, p.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '14px', background: 'rgba(169,146,125,0.15)', fontSize: '11px', cursor: 'pointer' }}>
+                            {p.avatar} {p.name.split(' ')[0]} <X size={10} style={{ color: '#a9927d' }} />
+                          </span>
+                        ))}
+                        {(taskAssignments[task.id] || []).length === 0 && (
+                          <span style={{ fontSize: '11px', color: '#a9927d', fontStyle: 'italic' }}>Drop here</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              )}
-              
-              <div ref={messagesEndRef} />
-            </div>
+
+                {/* Team */}
+                <div style={{ width: '200px', background: 'white', borderRadius: '12px', border: '1px solid rgba(169,146,125,0.15)', padding: '14px', overflowY: 'auto' }}>
+                  <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: '0 0 12px' }}>Team</p>
+                  {selectedTeam.map((person) => (
+                    <div key={person.id} draggable onDragStart={() => handleDragStart(person)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '10px', background: '#fbf7ef', marginBottom: '8px', cursor: 'grab', border: '1px solid rgba(169,146,125,0.1)' }}>
+                      <span style={{ fontSize: '20px' }}>{person.avatar}</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{person.name.split(' ')[0]}</p>
+                        <p style={{ fontSize: '10px', color: '#a9927d', margin: 0 }}>{person.role}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Create Project Button */}
+              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ padding: '14px 32px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(169,146,125,0.3)' }}>
+                  <CheckCircle2 size={18} /> Create Project
+                </motion.button>
+              </div>
+            </>
           )}
         </div>
-      </div>
-
-      {/* Input Area */}
-      <div className="border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <form onSubmit={handleSubmit} className="relative">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              placeholder="Describe your project... (e.g., 'I want to build an ecommerce site')"
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-6 py-4 pr-14 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none"
-              rows={3}
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="absolute right-3 bottom-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white p-3 rounded-xl transition-all shadow-lg shadow-indigo-500/20 disabled:shadow-none"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <Send size={20} />
-              )}
-            </button>
-          </form>
-          <p className="text-xs text-zinc-500 mt-2 text-center">
-            Press Enter to send, Shift + Enter for new line
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
