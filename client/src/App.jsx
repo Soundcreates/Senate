@@ -2,6 +2,8 @@ import React, { useEffect } from 'react'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
 import Register from './pages/Register'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
 import Admin from './pages/Admin'
 import AdminDashboard from './pages/AdminDashboard'
 import ProjectDetail from './pages/ProjectDetail'
@@ -25,15 +27,15 @@ function App() {
       // lenis.destroy()
     }
   }, [])
-
-  return (
+ return (
     <AuthProvider>
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/signup" element={<Register />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/dashboard" element={<AdminDashboard />} />
+          <Route path="/register" element={<Register />} />
+          <Route path = "/login" element = {<Login />} />
+          <Route  path="/admin" element={<Admin />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/project/:id" element={<ProjectDetail />} />
           <Route path="/user" element={<UserDashboard />} />
         </Routes>
