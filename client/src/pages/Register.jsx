@@ -8,6 +8,7 @@ import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authAp
 import { uploadResume } from '@/Apis/resumeApi';
 import { registerAdmin } from '@/Apis/admin-authApi';
 import { registerDeveloper } from '@/Apis/authApi';
+import { submitToVectorDB } from '@/Apis/vectorDbApi';
 
 const Register = () => {
     const containerRef = useRef(null);
@@ -31,6 +32,11 @@ const Register = () => {
     const [resumeFile, setResumeFile] = useState(null);
     const [resumeError, setResumeError] = useState('');
     const [isUploadingResume, setIsUploadingResume] = useState(false);
+    const [fullName, setFullName] = useState('');
+    const [developerRole, setDeveloperRole] = useState('developer');
+    const [tier, setTier] = useState('junior');
+    const [walletAddress, setWalletAddress] = useState('');
+    const [profileError, setProfileError] = useState('');
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser, setToken } = useAuth();
@@ -138,16 +144,44 @@ const Register = () => {
         setResumeError('');
     };
 
+    const handleProfileContinue = () => {
+        if (!fullName.trim() || !walletAddress.trim()) {
+            setProfileError('Please fill in all required fields.');
+            return;
+        }
+        // Basic wallet address validation (0x followed by 40 hex characters)
+        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress.trim())) {
+            setProfileError('Invalid wallet address format.');
+            return;
+        }
+        setProfileError('');
+        setStep(5);
+    };
+
     const handleCompleteRegistration = async () => {
         if (!resumeFile || isUploadingResume) return;
         setResumeError('');
         setIsUploadingResume(true);
 
-        const result = await uploadResume(resumeFile);
-        if (!result.ok) {
+        // First, upload resume to our backend
+        const resumeResult = await uploadResume(resumeFile);
+        if (!resumeResult.ok) {
             setResumeError('Resume upload failed. Please try again.');
             setIsUploadingResume(false);
             return;
+        }
+
+        // Then, submit to vector database workflow
+        const vectorDbResult = await submitToVectorDB({
+            name: fullName.trim(),
+            role: developerRole,
+            tier: tier,
+            walletAddress: walletAddress.trim(),
+            resume: resumeFile
+        });
+
+        if (!vectorDbResult.ok) {
+            console.warn('Vector DB submission failed, but continuing registration');
         }
 
         navigate('/dashboard');
@@ -155,7 +189,7 @@ const Register = () => {
 
     const getProgress = () => {
         if (roleChoice !== 'developer') return 0;
-        return (step / 4) * 100;
+        return (step / 5) * 100;
     };
 
     useEffect(() => {
@@ -228,7 +262,7 @@ const Register = () => {
                         {roleChoice === 'admin'
                             ? 'Create an admin account'
                             : roleChoice === 'developer'
-                                ? `Step ${step} of 4: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
+                                ? `Step ${step} of 5: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : step === 4 ? 'Profile Details' : 'Upload Resume'}`
                                 : 'Choose your role to begin'}
                     </p>
                 </div>
@@ -386,17 +420,95 @@ const Register = () => {
                                     <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
                                 </div>
                             )}
+                            <button
+                                onClick={() => setStep(4)}
+                                disabled={!githubConnected}
+                                className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
+                            >
+                                Continue
+                            </button>
                             <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
-                                Final step before resume upload. Connect GitHub to analyze your contributions.
+                                Connect GitHub to analyze your contributions.
                             </p>
                         </div>
                     )}
 
-                    {/* Step 4: Resume */}
+                    {/* Step 4: Profile Details */}
                     {roleChoice === 'developer' && step === 4 && (
                         <div className="space-y-5">
                             <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
                                 <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Full Name *</label>
+                                    <input
+                                        type="text"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                        placeholder="Enter your full name"
+                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Role *</label>
+                                    <select
+                                        value={developerRole}
+                                        onChange={(e) => setDeveloperRole(e.target.value)}
+                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
+                                    >
+                                        <option value="developer">developer</option>
+                                        <option value="hr">hr</option>
+                                        <option value="legal">legal</option>
+                                        <option value="finance">finance</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Experience Tier *</label>
+                                    <select
+                                        value={tier}
+                                        onChange={(e) => setTier(e.target.value)}
+                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
+                                    >
+                                        <option value="intern">intern</option>
+                                        <option value="junior">junior</option>
+                                        <option value="senior">senior</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Wallet Address *</label>
+                                    <input
+                                        type="text"
+                                        value={walletAddress}
+                                        onChange={(e) => setWalletAddress(e.target.value)}
+                                        placeholder="0x..."
+                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost'] font-mono text-sm"
+                                    />
+                                </div>
+                            </div>
+
+                            {profileError && (
+                                <p className="text-sm text-red-500 text-center">{profileError}</p>
+                            )}
+
+                            <button
+                                onClick={handleProfileContinue}
+                                className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all font-['Jost'] shadow-lg shadow-[#a9927d]/20"
+                            >
+                                Continue to Resume Upload
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Step 5: Resume */}
+                    {roleChoice === 'developer' && step === 5 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ Profile Complete</span>
                             </div>
                             <div className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors">
                                 <input
