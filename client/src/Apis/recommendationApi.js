@@ -9,6 +9,10 @@ const BASE_API = "http://localhost:3000";
  */
 export const getRecommendations = async (query, context = {}, userId = null) => {
   try {
+    // Create AbortController for 90 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
     const response = await fetch(`${BASE_API}/api/recommendations`, {
       method: "POST",
       credentials: "include",
@@ -20,8 +24,11 @@ export const getRecommendations = async (query, context = {}, userId = null) => 
         query,
         context,
         userId
-      })
+      }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
