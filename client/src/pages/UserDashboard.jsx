@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { use, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchWakatimeStats } from '@/Apis/statApis';
 import { listProjectTasks, listProjects } from '@/Apis/projectApis';
 import { fetchRecentCommits } from '@/Apis/githubApi';
+import AdminDashboard from './AdminDashboard';
 
 const buildWeekRange = () => {
     const today = new Date();
@@ -143,8 +144,7 @@ const UserDashboard = () => {
             isMounted = false;
         };
     }, [fetchUserProfile]);
-
-    const totalHours = useMemo(
+        const totalHours = useMemo(
         () => wakatimeData.reduce((sum, entry) => sum + (entry.hours || 0), 0),
         [wakatimeData]
     );
@@ -187,7 +187,9 @@ const UserDashboard = () => {
             };
         });
     }, [projects, projectTasks, recentCommits, totalHours, user?.role]);
-
+    if(user.role === "admin"){
+        return <AdminDashboard />
+    }else{
     return (
         <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif" }}>
             <style>{`
@@ -514,6 +516,7 @@ const UserDashboard = () => {
             </div>
         </div>
     );
+};
 };
 
 export default UserDashboard;
