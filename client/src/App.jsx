@@ -5,6 +5,7 @@ import Register from './pages/Register'
 import Admin from './pages/Admin'
 import AdminDashboard from './pages/AdminDashboard'
 import ProjectDetail from './pages/ProjectDetail'
+import UserDashboard from './pages/UserDashboard'
 import { AuthProvider } from './context/AuthContext'
 import Lenis from 'lenis'
 
@@ -34,6 +35,7 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/dashboard" element={<AdminDashboard />} />
           <Route path="/project/:id" element={<ProjectDetail />} />
+          <Route path="/user" element={<UserDashboard />} />
         </Routes>
       </Router>
     </AuthProvider>
