@@ -22,9 +22,12 @@ const budgetOptions = [
 const Admin = () => {
   const [step, setStep] = useState(1);
   const [projectDescription, setProjectDescription] = useState('');
-  const [budget, setBudget] = useState('');
+  const [projectTitle, setProjectTitle] = useState('');
+  const [budget, setBudget] = useState(5000); // Default 5k
+  const [deadline, setDeadline] = useState('');
   const [teamSize, setTeamSize] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [taskAssignments, setTaskAssignments] = useState({}); // { taskId: [person1, person2, ...] }
   const [draggedPerson, setDraggedPerson] = useState(null);
@@ -32,6 +35,34 @@ const Admin = () => {
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [expandedPerson, setExpandedPerson] = useState(null);
+
+  // Calculate progress percentage
+  const progress = (step / 8) * 100;
+
+  const generateTitle = async (prompt) => {
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Generate a professional, concise project title (max 5 words) for this request: "${prompt}". Return ONLY the title text. No quotes.`
+              }]
+            }]
+          })
+        }
+      );
+      const data = await response.json();
+      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return data.candidates[0].content.parts[0].text.trim();
+      }
+      return prompt; // Fallback
+    } catch (e) { return prompt; }
+  };
 
   const splitIntoTasks = async (prompt) => {
     try {
@@ -46,7 +77,7 @@ const Admin = () => {
               parts: [{
                 text: `Break down this project into ${teamSize + 1} tasks. Return ONLY JSON array:
 [{"id": 1, "title": "Task", "description": "Description", "priority": "High|Medium|Low", "estimatedHours": number}]
-Project: "${prompt}". Return ONLY JSON.`
+Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
               }]
             }]
           })
@@ -62,11 +93,17 @@ Project: "${prompt}". Return ONLY JSON.`
   };
 
   const handleStep1Submit = (e) => { e.preventDefault(); if (projectDescription.trim()) setStep(2); };
-  const handleStep2Submit = () => { if (budget) setStep(3); };
-  const handleStep3Submit = async () => {
-    setStep(4);
+  const handleStep2Submit = () => { setStep(3); };
+  const handleStep3Submit = (e) => { e.preventDefault(); if (deadline.trim()) setStep(4); };
+  const handleStep4Submit = async () => {
+    setStep(5);
     setIsLoading(true);
     setIsLoadingRecommendations(true);
+
+    // Generate Title in parallel
+    generateTitle(projectDescription).then(title => setProjectTitle(title));
+
+    // Fetch recommendations from RAG endpoint
 
     // Fetch recommendations from RAG endpoint
     try {
@@ -79,16 +116,16 @@ Project: "${prompt}". Return ONLY JSON.`
       };
 
       const recommendationResult = await getRecommendations(query, context);
-      
+
       console.log('[Admin] Recommendation result:', recommendationResult);
 
       if (recommendationResult.ok && recommendationResult.data) {
         // Parse and format the recommendations from RAG
         const ragData = recommendationResult.data;
-        
+
         console.log('[Admin] RAG data received:', ragData);
         console.log('[Admin] RAG data type:', typeof ragData, Array.isArray(ragData));
-        
+
         // Check if this is just a workflow start message (n8n returns this when configured for immediate response)
         if (ragData.message === 'Workflow was started') {
           console.warn('[Admin] RAG workflow started but no data returned yet. Using fallback.');
@@ -125,7 +162,7 @@ Project: "${prompt}". Return ONLY JSON.`
             // Default avatars and roles for variety
             const defaultAvatars = ['👨‍💻', '👩‍💻', '🧑‍💻', '👨‍🔬', '👩‍🔬', '🧑‍🎨', '👨‍🏫', '👩‍🏫'];
             const defaultRoles = ['Full-Stack', 'Backend', 'Frontend', 'DevOps', 'Data Science', 'UI/UX', 'Mobile', 'AI/ML'];
-            
+
             const formattedPeople = people.slice(0, 5).map((person, index) => {
               // Parse match field - handle both number and string formats (e.g., "100%" or 100)
               let matchScore = 95 - index * 3; // Default descending scores
@@ -139,15 +176,15 @@ Project: "${prompt}". Return ONLY JSON.`
               } else if (person.score) {
                 matchScore = typeof person.score === 'number' ? person.score : parseInt(person.score);
               }
-              
+
               return {
                 id: person.id || person.userid || index + 1,
                 name: person.name || `Team Member ${index + 1}`,
                 role: person.role || person.skills || defaultRoles[index % defaultRoles.length],
                 match: matchScore,
                 avatar: person.avatar || defaultAvatars[index % defaultAvatars.length],
-                reason: person.reason || person.explanation || person.why || 
-                        `Strong technical background and experience relevant to ${projectDescription}. Recommended based on AI-powered skill matching and project requirements.`
+                reason: person.reason || person.explanation || person.why ||
+                  `Strong technical background and experience relevant to ${projectDescription}. Recommended based on AI-powered skill matching and project requirements.`
               };
             });
 
@@ -218,10 +255,20 @@ Project: "${prompt}". Return ONLY JSON.`
   return (
     <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Jost:wght@300;400;500;600&display=swap');`}</style>
-      
+
+      {/* Progress Bar */}
+      <div style={{ width: '100%', height: '4px', background: 'rgba(169,146,125,0.1)', position: 'absolute', top: 0, left: 0, zIndex: 20 }}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: "easeInOut" }}
+          style={{ height: '100%', background: '#a9927d' }}
+        />
+      </div>
+
       {/* Logo - Top Left */}
-      {step === 4 && (
-        <div style={{ position: 'absolute', top: '20px', left: '24px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
+      {step === 5 && (
+        <div style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
           <img src="/logo.png" alt="Senate" style={{ height: '24px', width: 'auto' }} />
         </div>
       )}
@@ -230,7 +277,7 @@ Project: "${prompt}". Return ONLY JSON.`
       {step === 1 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            style={{ fontFamily: "'Playfair Display', serif", fontSize: '42px', fontWeight: '500', color: '#2d2a26', marginBottom: '32px' }}>
+            style={{ fontFamily: "'Jost', sans-serif", fontSize: '42px', fontWeight: '500', color: '#2d2a26', marginBottom: '32px' }}>
             Build Anything.
           </motion.h1>
           <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -248,32 +295,94 @@ Project: "${prompt}". Return ONLY JSON.`
         </div>
       )}
 
-      {/* Step 2: Budget */}
+      {/* Step 2: Budget (Slider) */}
       {step === 2 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <DollarSign size={36} style={{ color: '#a9927d', marginBottom: '12px' }} />
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Budget?</h2>
-          <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '24px' }}>Select your project budget range</p>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '24px' }}>
-            {budgetOptions.map((opt) => (
-              <button key={opt.value} onClick={() => setBudget(opt.value)}
-                style={{ padding: '10px 20px', borderRadius: '20px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', background: budget === opt.value ? '#a9927d' : 'white', color: budget === opt.value ? 'white' : '#2d2a26', border: budget === opt.value ? 'none' : '1px solid rgba(169,146,125,0.3)' }}>
-                {opt.label}
-              </button>
-            ))}
+          <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Budget?</h2>
+          <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '32px' }}>Estimating costs for your project</p>
+
+          <div style={{ width: '100%', maxWidth: '400px', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'flex-end' }}>
+              <span style={{ fontSize: '14px', color: '#a9927d' }}>$1k</span>
+              <span style={{ fontSize: '32px', fontWeight: '600', color: '#2d2a26' }}>${budget.toLocaleString()}</span>
+              <span style={{ fontSize: '14px', color: '#a9927d' }}>$100k+</span>
+            </div>
+            <input
+              type="range"
+              min="1000"
+              max="100000"
+              step="1000"
+              value={budget}
+              onChange={(e) => setBudget(parseInt(e.target.value))}
+              style={{
+                width: '100%',
+                height: '6px',
+                background: `linear-gradient(to right, #a9927d 0%, #a9927d ${(budget / 100000) * 100}%, rgba(169,146,125,0.2) ${(budget / 100000) * 100}%, rgba(169,146,125,0.2) 100%)`,
+                borderRadius: '3px',
+                appearance: 'none',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            />
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => setStep(1)} style={{ padding: '10px 20px', borderRadius: '20px', border: '1px solid rgba(169,146,125,0.3)', background: 'white', color: '#2d2a26', fontSize: '14px', cursor: 'pointer' }}><ArrowLeft size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Back</button>
-            <button onClick={handleStep2Submit} disabled={!budget} style={{ padding: '10px 20px', borderRadius: '20px', border: 'none', background: budget ? '#a9927d' : 'rgba(169,146,125,0.3)', color: 'white', fontSize: '14px', fontWeight: '600', cursor: budget ? 'pointer' : 'not-allowed' }}>Continue <ArrowRight size={14} style={{ marginLeft: '4px', verticalAlign: 'middle' }} /></button>
+
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '10px' }}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(1)} style={{ padding: '12px 24px', borderRadius: '14px', border: '1px solid rgba(169,146,125,0.2)', background: 'white', color: '#5e503f', fontSize: '14px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}><ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back</motion.button>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleStep2Submit} style={{ padding: '12px 32px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(169,146,125,0.3)' }}>Continue <ArrowRight size={16} style={{ marginLeft: '6px' }} /></motion.button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Team Size */}
+      {/* Step 3: Deadline */}
       {step === 3 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <Clock size={36} style={{ color: '#a9927d', marginBottom: '12px' }} />
+          <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Timeline?</h2>
+          <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '24px' }}>By when do you need this completed?</p>
+
+          <form onSubmit={handleStep3Submit} style={{ width: '100%', maxWidth: '320px', marginBottom: '24px' }}>
+            <input
+              type="text"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              placeholder="e.g., 2 months, Dec 25th..."
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(169,146,125,0.3)',
+                background: 'white',
+                fontSize: '16px',
+                color: '#2d2a26',
+                textAlign: 'center',
+                outline: 'none'
+              }}
+            />
+          </form>
+
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '32px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {['1 month', '3 months', '6 months', 'ASAP'].map(opt => (
+              <button key={opt} onClick={() => setDeadline(opt)}
+                style={{ padding: '8px 16px', borderRadius: '16px', border: deadline === opt ? 'none' : '1px solid rgba(169,146,125,0.2)', background: deadline === opt ? '#a9927d' : 'white', color: deadline === opt ? 'white' : '#5e503f', fontSize: '13px', cursor: 'pointer' }}>
+                {opt}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(2)} style={{ padding: '12px 24px', borderRadius: '14px', border: '1px solid rgba(169,146,125,0.2)', background: 'white', color: '#5e503f', fontSize: '14px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}><ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back</motion.button>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={(e) => handleStep3Submit(e)} disabled={!deadline.trim()} style={{ padding: '12px 32px', borderRadius: '14px', border: 'none', background: deadline.trim() ? '#a9927d' : 'rgba(169,146,125,0.3)', color: 'white', fontSize: '14px', fontWeight: '600', cursor: deadline.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', boxShadow: deadline.trim() ? '0 4px 12px rgba(169,146,125,0.3)' : 'none' }}>Continue <ArrowRight size={16} style={{ marginLeft: '6px' }} /></motion.button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Team Size */}
+      {step === 4 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <Users size={36} style={{ color: '#a9927d', marginBottom: '12px' }} />
-          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Team Size?</h2>
+          <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Team Size?</h2>
           <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '24px' }}>How many people on your team?</p>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
             {[2, 3, 4, 5].map((s) => (
@@ -283,15 +392,15 @@ Project: "${prompt}". Return ONLY JSON.`
               </button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => setStep(2)} style={{ padding: '10px 20px', borderRadius: '20px', border: '1px solid rgba(169,146,125,0.3)', background: 'white', color: '#2d2a26', fontSize: '14px', cursor: 'pointer' }}><ArrowLeft size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Back</button>
-            <button onClick={handleStep3Submit} style={{ padding: '10px 20px', borderRadius: '20px', border: 'none', background: '#a9927d', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Generate <ArrowRight size={14} style={{ marginLeft: '4px', verticalAlign: 'middle' }} /></button>
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(3)} style={{ padding: '12px 24px', borderRadius: '14px', border: '1px solid rgba(169,146,125,0.2)', background: 'white', color: '#5e503f', fontSize: '14px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}><ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back</motion.button>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleStep4Submit} style={{ padding: '12px 32px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(169,146,125,0.3)' }}>Generate <ArrowRight size={16} style={{ marginLeft: '6px' }} /></motion.button>
           </div>
         </div>
       )}
 
-      {/* Step 4: Assignment */}
-      {step === 4 && (
+      {/* Step 5: Assignment */}
+      {step === 5 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px' }}>
           {isLoading ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
@@ -302,7 +411,7 @@ Project: "${prompt}". Return ONLY JSON.`
             <>
               {/* Header */}
               <div style={{ marginBottom: '20px' }}>
-                <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '22px', color: '#2d2a26', margin: 0 }}>{projectDescription}</h2>
+                <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: '22px', color: '#2d2a26', margin: 0 }}>{projectDescription}</h2>
                 <p style={{ fontSize: '13px', color: '#a9927d', margin: '4px 0 0' }}>Drag team members to tasks • One person can do multiple tasks</p>
               </div>
 
@@ -311,22 +420,53 @@ Project: "${prompt}". Return ONLY JSON.`
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                   {tasks.map((task) => (
                     <div key={task.id} onDragOver={handleDragOver} onDrop={() => handleDrop(task.id)}
-                      style={{ background: 'white', border: '1px solid rgba(169,146,125,0.15)', borderRadius: '12px', padding: '12px 14px', marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#a9927d', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600' }}>{task.id}</span>
-                        <span style={{ fontWeight: '600', color: '#2d2a26', fontSize: '14px', flex: 1 }}>{task.title}</span>
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(169,146,125,0.1)', color: getPriorityColor(task.priority), fontWeight: '600' }}>{task.priority}</span>
+                      style={{
+                        background: 'white',
+                        border: '1px solid rgba(169,146,125,0.2)',
+                        borderRadius: '16px',
+                        padding: '16px',
+                        marginBottom: '12px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                        transition: 'all 0.2s ease',
+                        cursor: 'default'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.borderColor = '#a9927d'}
+                      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(169,146,125,0.2)'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <span style={{
+                          width: '24px', height: '24px', borderRadius: '50%',
+                          background: '#fbf7ef', color: '#a9927d', border: '1px solid rgba(169,146,125,0.3)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '12px', fontWeight: '700'
+                        }}>{task.id}</span>
+                        <span style={{ fontWeight: '600', color: '#2d2a26', fontSize: '15px', flex: 1 }}>{task.title}</span>
+                        <span style={{ fontSize: '10px', padding: '4px 10px', borderRadius: '20px', background: `${getPriorityColor(task.priority)}15`, color: getPriorityColor(task.priority), fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{task.priority}</span>
                       </div>
-                      <p style={{ fontSize: '12px', color: '#5e503f', margin: '0 0 8px 30px' }}>{task.description}</p>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginLeft: '30px', minHeight: '28px' }}>
+                      <p style={{ fontSize: '13px', color: '#5e503f', margin: '0 0 12px 34px', lineHeight: '1.5' }}>{task.description}</p>
+
+                      {/* Drop Zone / Assigned People */}
+                      <div style={{
+                        display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: '34px', minHeight: '36px',
+                        padding: '4px', borderRadius: '12px',
+                        background: (taskAssignments[task.id] || []).length === 0 ? 'rgba(169,146,125,0.05)' : 'transparent',
+                        border: (taskAssignments[task.id] || []).length === 0 ? '1px dashed rgba(169,146,125,0.3)' : '1px solid transparent',
+                        alignItems: 'center'
+                      }}>
                         {(taskAssignments[task.id] || []).map(p => (
-                          <span key={p.id} onClick={() => removeFromTask(task.id, p.id)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '14px', background: 'rgba(169,146,125,0.15)', fontSize: '11px', cursor: 'pointer' }}>
-                            {p.avatar} {p.name.split(' ')[0]} <X size={10} style={{ color: '#a9927d' }} />
-                          </span>
+                          <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} key={p.id} onClick={() => removeFromTask(task.id, p.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '20px', background: 'white', border: '1px solid rgba(169,146,125,0.2)', fontSize: '12px', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                            <span style={{ fontSize: '14px' }}>{p.avatar}</span>
+                            <span style={{ fontWeight: '500', color: '#2d2a26' }}>{p.name.split(' ')[0]}</span>
+                            <X size={12} style={{ color: '#a9927d', marginLeft: '2px' }} />
+                          </motion.div>
                         ))}
                         {(taskAssignments[task.id] || []).length === 0 && (
-                          <span style={{ fontSize: '11px', color: '#a9927d', fontStyle: 'italic' }}>Drop here</span>
+                          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                            <span style={{ fontSize: '12px', color: '#a9927d', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <ArrowRight size={12} /> Drag team members here
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -350,22 +490,22 @@ Project: "${prompt}". Return ONLY JSON.`
                     </div>
                   ) : (
                     top5People.map((person, index) => (
-                      <div key={person.id} 
-                        draggable={index < teamSize} 
+                      <div key={person.id}
+                        draggable={index < teamSize}
                         onDragStart={index < teamSize ? () => handleDragStart(person) : undefined}
-                        style={{ 
-                          marginBottom: '8px', 
-                          borderRadius: '10px', 
-                          background: '#fbf7ef', 
+                        style={{
+                          marginBottom: '8px',
+                          borderRadius: '10px',
+                          background: '#fbf7ef',
                           border: '1px solid rgba(169,146,125,0.1)',
                           overflow: 'hidden'
                         }}>
-                        <div 
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px', 
-                            padding: '8px 10px', 
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 10px',
                             cursor: index < teamSize ? 'grab' : 'default',
                             opacity: index < teamSize ? 1 : 0.6
                           }}>
@@ -376,12 +516,12 @@ Project: "${prompt}". Return ONLY JSON.`
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#16a34a' }}>{person.match}%</span>
-                            <button 
+                            <button
                               onClick={() => setExpandedPerson(expandedPerson === person.id ? null : person.id)}
-                              style={{ 
-                                background: 'none', 
-                                border: 'none', 
-                                cursor: 'pointer', 
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
                                 padding: '2px',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -397,14 +537,14 @@ Project: "${prompt}". Return ONLY JSON.`
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            style={{ 
+                            style={{
                               padding: '0 10px 10px 10px',
                               borderTop: '1px solid rgba(169,146,125,0.1)'
                             }}>
-                            <p style={{ 
-                              fontSize: '10px', 
-                              color: '#5e503f', 
-                              margin: '8px 0 0', 
+                            <p style={{
+                              fontSize: '10px',
+                              color: '#5e503f',
+                              margin: '8px 0 0',
                               lineHeight: '1.4',
                               fontStyle: 'italic'
                             }}>
@@ -423,15 +563,145 @@ Project: "${prompt}". Return ONLY JSON.`
                 </div>
               </div>
 
-              {/* Create Project Button */}
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center' }}>
-                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  style={{ padding: '14px 32px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(169,146,125,0.3)' }}>
-                  <CheckCircle2 size={18} /> Create Project
+              {/* Navigation: Back & Next */}
+              <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'center', gap: '16px' }}>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(4)} style={{ padding: '12px 24px', borderRadius: '14px', border: '1px solid rgba(169,146,125,0.2)', background: 'white', color: '#5e503f', fontSize: '14px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}><ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back</motion.button>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(6)}
+                  style={{ padding: '12px 32px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(169,146,125,0.3)' }}>
+                  Review Project <ArrowRight size={18} />
                 </motion.button>
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Step 6: Summary & Launch */}
+      {step === 6 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px', maxWidth: '800px', margin: '0 auto', width: '100%', alignItems: 'center' }}>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ width: '100%' }}>
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: '32px', color: '#2d2a26', marginBottom: '8px' }}>Ready to Launch?</h1>
+              <p style={{ fontSize: '14px', color: '#a9927d' }}>Review your project details before creating</p>
+            </div>
+
+            {/* Project Overview Card */}
+            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid rgba(169,146,125,0.15)', padding: '24px', marginBottom: '24px', width: '100%' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '24px', borderBottom: '1px solid rgba(169,146,125,0.1)', paddingBottom: '20px' }}>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#a9927d', fontWeight: '500', margin: '0 0 4px' }}>PROJECT</p>
+                  <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{projectTitle || 'Generating Title...'}</p>
+                  <p style={{ fontSize: '12px', color: '#5e503f', marginTop: '4px', fontStyle: 'italic' }}>"{projectDescription}"</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#a9927d', fontWeight: '500', margin: '0 0 4px' }}>BUDGET</p>
+                  <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>${budget.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#a9927d', fontWeight: '500', margin: '0 0 4px' }}>TIMELINE</p>
+                  <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{deadline}</p>
+                </div>
+              </div>
+
+              {/* Team Section */}
+              <div style={{ marginBottom: '24px' }}>
+                <p style={{ fontSize: '11px', color: '#a9927d', fontWeight: '500', margin: '0 0 12px' }}>SELECTED TEAM ({selectedTeam.length})</p>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {selectedTeam.map((person) => (
+                    <div key={person.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '20px', background: '#fbf7ef', border: '1px solid rgba(169,146,125,0.1)' }}>
+                      <span style={{ fontSize: '16px' }}>{person.avatar}</span>
+                      <div>
+                        <p style={{ fontSize: '12px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{person.name}</p>
+                        <p style={{ fontSize: '10px', color: '#a9927d', margin: 0 }}>{person.role}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Task Summary */}
+              <div>
+                <p style={{ fontSize: '11px', color: '#a9927d', fontWeight: '500', margin: '0 0 12px' }}>TASK DISTRIBUTION ({tasks.length} Tasks)</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {tasks.map((task) => (
+                    <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '10px', background: '#fafaf9', border: '1px solid rgba(0,0,0,0.03)' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: getPriorityColor(task.priority) }} />
+                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#2d2a26', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
+                      <div style={{ display: 'flex', marginLeft: 'auto' }}>
+                        {(taskAssignments[task.id] || []).slice(0, 3).map((p, i) => (
+                          <span key={i} style={{ marginLeft: i > 0 ? '-6px' : 0, fontSize: '14px', background: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e5e5e5' }}>{p.avatar}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '10px' }}>
+              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(5)} style={{ padding: '12px 24px', borderRadius: '14px', border: '1px solid rgba(169,146,125,0.2)', background: 'white', color: '#5e503f', fontSize: '14px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}><ArrowLeft size={16} style={{ marginRight: '6px' }} /> Back to Edit</motion.button>
+              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setStep(7)}
+                style={{ padding: '12px 36px', borderRadius: '14px', border: 'none', background: '#a9927d', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(169,146,125,0.4)' }}>
+                <CheckCircle2 size={18} /> Proceed to Payment
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Step 7: Payment (Escrow) */}
+      {step === 7 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', maxWidth: '480px', width: '100%', textAlign: 'center' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fbf7ef', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+              <Loader2 size={32} style={{ color: '#a9927d' }} />
+            </div>
+            <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: '28px', color: '#2d2a26', marginBottom: '8px' }}>Secure Escrow</h2>
+            <p style={{ fontSize: '14px', color: '#a9927d', marginBottom: '32px' }}>Deposit funds to start the project. Released only when milestones are met.</p>
+
+            <div style={{ marginBottom: '32px', padding: '20px', background: '#fbf7ef', borderRadius: '16px' }}>
+              <p style={{ fontSize: '12px', color: '#a9927d', fontWeight: '600', letterSpacing: '1px', marginBottom: '4px' }}>TOTAL AMOUNT</p>
+              <p style={{ fontSize: '36px', fontWeight: '600', color: '#2d2a26' }}>${budget.toLocaleString()}</p>
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setIsProcessingPayment(true);
+                setTimeout(() => {
+                  setIsProcessingPayment(false);
+                  setStep(8);
+                }, 2000);
+              }}
+              disabled={isProcessingPayment}
+              style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#2d2a26', color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              {isProcessingPayment ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+              {isProcessingPayment ? 'Processing...' : 'Pay & Start Project'}
+            </motion.button>
+
+            <button onClick={() => setStep(6)} style={{ marginTop: '20px', background: 'none', border: 'none', color: '#a9927d', fontSize: '14px', cursor: 'pointer', textDecoration: 'underline' }}>Cancel & Go Back</button>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Step 8: Success */}
+      {step === 8 && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ textAlign: 'center' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 10px 30px rgba(34,197,94,0.3)' }}>
+              <CheckCircle2 size={40} style={{ color: 'white' }} />
+            </div>
+            <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: '42px', color: '#2d2a26', marginBottom: '16px' }}>Project Started!</h1>
+            <p style={{ fontSize: '16px', color: '#5e503f', marginBottom: '40px', maxWidth: '400px', margin: '0 auto 40px', lineHeight: '1.6' }}>
+              Your project <strong>"{projectTitle}"</strong> is now live. The team has been notified and funds are secured in escrow.
+            </p>
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+              <motion.button whileHover={{ scale: 1.05 }} onClick={() => window.location.href = '/dashboard'}
+                style={{ padding: '14px 32px', borderRadius: '24px', border: 'none', background: '#2d2a26', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+                Go to Dashboard
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

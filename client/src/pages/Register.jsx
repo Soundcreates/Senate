@@ -34,30 +34,30 @@ const Register = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser, setToken } = useAuth();
-  
-    useEffect(() => {
-      const ctx = gsap.context(() => {
-        gsap.to('.bg-glow', {
-            scale: 1.2,
-            duration: 4,
-            repeat: -1,
-            yoyo: true,
-            ease: 'sine.inOut',
-        });
-        
-        gsap.from('.step-card', {
-            y: 20,
-            opacity: 0,
-            duration: 0.6,
-            ease: 'power2.out',
-            clearProps: 'all'
-        });
 
-      }, containerRef);
-  
-      return () => ctx.revert();
+    useEffect(() => {
+        const ctx = gsap.context(() => {
+            gsap.to('.bg-glow', {
+                scale: 1.2,
+                duration: 4,
+                repeat: -1,
+                yoyo: true,
+                ease: 'sine.inOut',
+            });
+
+            gsap.from('.step-card', {
+                y: 20,
+                opacity: 0,
+                duration: 0.6,
+                ease: 'power2.out',
+                clearProps: 'all'
+            });
+
+        }, containerRef);
+
+        return () => ctx.revert();
     }, [step]);
-  
+
     const handleWakatimeConnect = () => {
         startWakatimeOAuth("register");
     };
@@ -202,244 +202,239 @@ const Register = () => {
         hydrateFromSession();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.search]);
-  
+
     return (
-      <div ref={containerRef} className="min-h-screen bg-zinc-800 flex items-center justify-center p-6">
-        <div className="step-card w-full max-w-lg bg-zinc-700 rounded-2xl p-10 shadow-xl">
-             {/* Progress Indicator */}
-             <div className="mb-8">
-                <div className="h-2 bg-zinc-600 rounded-full overflow-hidden">
-                    <div 
-                        className="h-full bg-zinc-400 transition-all duration-500 ease-out"
-                        style={{ width: `${getProgress()}%` }}
-                    />
-                </div>
-            </div>
+        <div ref={containerRef} className="min-h-screen bg-[#fbf7ef] flex items-center justify-center p-6 text-[#2d2a26]">
+            <div className="bg-glow absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#a9927d]/10 rounded-full blur-[100px] -z-10" />
+            <div className="bg-glow absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#a9927d]/10 rounded-full blur-[100px] -z-10" />
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(169,146,125,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(169,146,125,0.03)_1px,transparent_1px)] bg-[size:24px_24px] -z-10" />
 
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold text-white mb-3">
-              Create Account
-            </h1>
-            <p className="text-zinc-400 text-base">
-                {roleChoice === 'admin'
-                    ? 'Create an admin account'
-                    : roleChoice === 'developer'
-                        ? `Step ${step} of 4: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
-                        : 'Choose your role to begin'}
-            </p>
-          </div>
-  
-          <div className="space-y-6">
-            {/* Step 0: Role Selection */}
-            {!roleChoice && (
-                <div className="space-y-5">
-                    <div className="space-y-2">
-                        <p className="text-sm text-zinc-400 text-left">Select your role</p>
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setRoleChoice('developer')}
-                                className={`rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-                                    roleChoice === 'developer'
-                                        ? 'bg-zinc-500 text-white'
-                                        : 'bg-zinc-600 text-zinc-300 hover:bg-zinc-500/70'
-                                }`}
-                            >
-                                Developer
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setRoleChoice('admin')}
-                                className={`rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-                                    roleChoice === 'admin'
-                                        ? 'bg-zinc-500 text-white'
-                                        : 'bg-zinc-600 text-zinc-300 hover:bg-zinc-500/70'
-                                }`}
-                            >
-                                Admin
-                            </button>
-                        </div>
-                    </div>
-                    <button
-                        onClick={handleRoleContinue}
-                        disabled={!roleChoice}
-                        className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Continue
-                    </button>
-                </div>
-            )}
-
-            {/* Admin Registration */}
-            {roleChoice === 'admin' && (
-                <div className="space-y-5">
-                    <div className="space-y-4">
-                        <label className="block text-sm text-zinc-400 text-left">Admin email</label>
-                        <input
-                            type="email"
-                            value={adminEmail}
-                            onChange={(event) => setAdminEmail(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="admin@example.com"
+            <div className="step-card w-full max-w-lg bg-white rounded-2xl p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#a9927d]/10">
+                {/* Progress Indicator */}
+                <div className="mb-8">
+                    <div className="h-2 bg-[#f0eadd] rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-[#a9927d] transition-all duration-500 ease-out"
+                            style={{ width: `${getProgress()}%` }}
                         />
-                        <label className="block text-sm text-zinc-400 text-left">Password</label>
-                        <input
-                            type="password"
-                            value={adminPassword}
-                            onChange={(event) => setAdminPassword(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="••••••••"
-                        />
-                        <label className="block text-sm text-zinc-400 text-left">Confirm password</label>
-                        <input
-                            type="password"
-                            value={adminPasswordConfirm}
-                            onChange={(event) => setAdminPasswordConfirm(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="••••••••"
-                        />
-                        {adminError && (
-                            <p className="text-sm text-red-400 text-left">{adminError}</p>
-                        )}
-                        <button
-                            onClick={handleAdminRegister}
-                            disabled={isSubmittingAdmin}
-                            className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isSubmittingAdmin ? 'Creating account...' : 'Create Admin Account'}
-                        </button>
                     </div>
                 </div>
-            )}
-            {/* Step 1: WakaTime */}
-            {roleChoice === 'developer' && step === 1 && (
-                <div className="space-y-5">
-                    <div className="space-y-4">
-                        <label className="block text-sm text-zinc-400 text-left">Email</label>
-                        <input
-                            type="email"
-                            value={developerEmail}
-                            onChange={(event) => setDeveloperEmail(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="you@example.com"
-                        />
-                        <label className="block text-sm text-zinc-400 text-left">Password</label>
-                        <input
-                            type="password"
-                            value={developerPassword}
-                            onChange={(event) => setDeveloperPassword(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="••••••••"
-                        />
-                        <label className="block text-sm text-zinc-400 text-left">Confirm password</label>
-                        <input
-                            type="password"
-                            value={developerPasswordConfirm}
-                            onChange={(event) => setDeveloperPasswordConfirm(event.target.value)}
-                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                            placeholder="••••••••"
-                        />
-                        {developerError && (
-                            <p className="text-sm text-red-400 text-left">{developerError}</p>
-                        )}
-                        <button
-                            onClick={handleDeveloperRegister}
-                            disabled={isSubmittingDeveloper}
-                            className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isSubmittingDeveloper ? 'Creating account...' : 'Continue to WakaTime'}
-                        </button>
-                    </div>
-                </div>
-            )}
 
-                {/* Step 2: Email */}
-                {roleChoice === 'developer' && step === 2 && (
-                 <div className="space-y-5">
-                            <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                                <span className="text-sm text-zinc-300">✓ Account Created</span>
-                            </div>
-                     <button 
-                        onClick={handleWakatimeConnect}
-                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
-                      >
-                        <div className="text-lg font-semibold mb-1">Connect WakaTime</div>
-                        <div className="text-sm text-zinc-300">Track your coding statistics</div>
-                      </button>
-                                            <p className="text-sm text-center text-zinc-400 leading-relaxed">
-                                                This allows us to generate your productivity analytics automatically.
-                                            </p>
-                </div>
-            )}
-
-            {/* Step 3: GitHub */}
-            {roleChoice === 'developer' && step === 3 && (
-                <div className="space-y-5">
-                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                        <span className="text-sm text-zinc-300">✓ WakaTime Connected</span>
-                    </div>
-
-                    <button 
-                        onClick={handleGithubConnect}
-                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
-                    >
-                        <div className="text-lg font-semibold mb-1">Connect GitHub</div>
-                        <div className="text-sm text-zinc-300">Import repositories & contributions</div>
-                    </button>
-                    {githubConnected && (
-                        <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                            <span className="text-sm text-zinc-300">✓ GitHub Connected</span>
-                        </div>
-                    )}
-                    <p className="text-sm text-center text-zinc-400 leading-relaxed">
-                        Final step before resume upload. Connect GitHub to analyze your contributions.
+                <div className="text-center mb-10">
+                    <h1 className="text-3xl font-bold text-[#2d2a26] mb-3 font-['Jost']">
+                        Create Account
+                    </h1>
+                    <p className="text-[#a9927d] text-base font-['Jost']">
+                        {roleChoice === 'admin'
+                            ? 'Create an admin account'
+                            : roleChoice === 'developer'
+                                ? `Step ${step} of 4: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
+                                : 'Choose your role to begin'}
                     </p>
                 </div>
-            )}
 
-            {/* Step 4: Resume */}
-            {roleChoice === 'developer' && step === 4 && (
-                <div className="space-y-5">
-                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                        <span className="text-sm text-zinc-300">✓ GitHub Connected</span>
-                    </div>
-                    <div className="border-2 border-dashed border-zinc-500 rounded-xl p-6 text-center bg-zinc-600/40">
-                        <input
-                            type="file"
-                            className="hidden"
-                            id="resume-upload"
-                            onChange={handleResumeUpload}
-                            accept="application/pdf"
-                        />
-                        <label htmlFor="resume-upload" className="cursor-pointer text-zinc-300">
-                            {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
-                        </label>
-                    </div>
-                    {resumeError && (
-                        <p className="text-sm text-red-400 text-center">{resumeError}</p>
+                <div className="space-y-6">
+                    {/* Step 0: Role Selection */}
+                    {!roleChoice && (
+                        <div className="space-y-5">
+                            <div className="space-y-2">
+                                <p className="text-sm text-[#5e503f] text-left font-['Jost']">Select your role</p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRoleChoice('developer')}
+                                        className={`rounded-xl px-4 py-3 text-sm font-medium transition-all font-['Jost'] border ${roleChoice === 'developer'
+                                            ? 'bg-[#a9927d] text-white border-[#a9927d]'
+                                            : 'bg-[#fbf7ef] text-[#5e503f] border-[#a9927d]/10 hover:bg-[#f0eadd]'
+                                            }`}
+                                    >
+                                        Developer
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRoleChoice('admin')}
+                                        className={`rounded-xl px-4 py-3 text-sm font-medium transition-all font-['Jost'] border ${roleChoice === 'admin'
+                                            ? 'bg-[#a9927d] text-white border-[#a9927d]'
+                                            : 'bg-[#fbf7ef] text-[#5e503f] border-[#a9927d]/10 hover:bg-[#f0eadd]'
+                                            }`}
+                                    >
+                                        Admin
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     )}
-                    <button
-                        onClick={handleCompleteRegistration}
-                        disabled={!resumeFile || isUploadingResume}
-                        className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isUploadingResume ? 'Uploading...' : 'Complete Registration'}
-                    </button>
+
+                    {/* Admin Registration */}
+                    {roleChoice === 'admin' && (
+                        <div className="space-y-5">
+                            <div className="space-y-4">
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Admin email</label>
+                                <input
+                                    type="email"
+                                    value={adminEmail}
+                                    onChange={(event) => setAdminEmail(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="admin@example.com"
+                                />
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Password</label>
+                                <input
+                                    type="password"
+                                    value={adminPassword}
+                                    onChange={(event) => setAdminPassword(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="••••••••"
+                                />
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Confirm password</label>
+                                <input
+                                    type="password"
+                                    value={adminPasswordConfirm}
+                                    onChange={(event) => setAdminPasswordConfirm(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="••••••••"
+                                />
+                                {adminError && (
+                                    <p className="text-sm text-red-500 text-left">{adminError}</p>
+                                )}
+                                <button
+                                    onClick={handleAdminRegister}
+                                    disabled={isSubmittingAdmin}
+                                    className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
+                                >
+                                    {isSubmittingAdmin ? 'Creating account...' : 'Create Admin Account'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {/* Step 1: WakaTime */}
+                    {roleChoice === 'developer' && step === 1 && (
+                        <div className="space-y-5">
+                            <div className="space-y-4">
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Email</label>
+                                <input
+                                    type="email"
+                                    value={developerEmail}
+                                    onChange={(event) => setDeveloperEmail(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="you@example.com"
+                                />
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Password</label>
+                                <input
+                                    type="password"
+                                    value={developerPassword}
+                                    onChange={(event) => setDeveloperPassword(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="••••••••"
+                                />
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Confirm password</label>
+                                <input
+                                    type="password"
+                                    value={developerPasswordConfirm}
+                                    onChange={(event) => setDeveloperPasswordConfirm(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="••••••••"
+                                />
+                                {developerError && (
+                                    <p className="text-sm text-red-500 text-left">{developerError}</p>
+                                )}
+                                <button
+                                    onClick={handleDeveloperRegister}
+                                    disabled={isSubmittingDeveloper}
+                                    className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
+                                >
+                                    {isSubmittingDeveloper ? 'Creating account...' : 'Continue to WakaTime'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 2: Email */}
+                    {roleChoice === 'developer' && step === 2 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ Account Created</span>
+                            </div>
+                            <button
+                                onClick={handleWakatimeConnect}
+                                className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
+                            >
+                                <div className="text-lg font-semibold mb-1 font-['Jost']">Connect WakaTime</div>
+                                <div className="text-sm text-[#a9927d]">Track your coding statistics</div>
+                            </button>
+                            <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
+                                This allows us to generate your productivity analytics automatically.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Step 3: GitHub */}
+                    {roleChoice === 'developer' && step === 3 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ WakaTime Connected</span>
+                            </div>
+
+                            <button
+                                onClick={handleGithubConnect}
+                                className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
+                            >
+                                <div className="text-lg font-semibold mb-1 font-['Jost']">Connect GitHub</div>
+                                <div className="text-sm text-[#a9927d]">Import repositories & contributions</div>
+                            </button>
+                            {githubConnected && (
+                                <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                    <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
+                                </div>
+                            )}
+                            <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
+                                Final step before resume upload. Connect GitHub to analyze your contributions.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Step 4: Resume */}
+                    {roleChoice === 'developer' && step === 4 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
+                            </div>
+                            <div className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors">
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    id="resume-upload"
+                                    onChange={handleResumeUpload}
+                                    accept="application/pdf"
+                                />
+                                <label htmlFor="resume-upload" className="cursor-pointer text-[#5e503f] font-['Jost']">
+                                    {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
+                                </label>
+                            </div>
+                            {resumeError && (
+                                <p className="text-sm text-red-500 text-center">{resumeError}</p>
+                            )}
+                            <button
+                                onClick={handleCompleteRegistration}
+                                disabled={!resumeFile || isUploadingResume}
+                                className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
+                            >
+                                {isUploadingResume ? 'Uploading...' : 'Complete Registration'}
+                            </button>
+                        </div>
+                    )}
                 </div>
-            )}
-          </div>
-  
-          <div className="mt-10 text-center pt-6 border-t border-zinc-600">
-            <p className="text-zinc-400 text-sm">
-              Already have an account?{' '}
-              <Link to="/login" className="text-zinc-300 font-medium hover:text-white transition-colors underline">
-                Sign in
-              </Link>
-            </p>
-          </div>
+
+                <div className="mt-10 text-center pt-6 border-t border-[#a9927d]/10">
+                    <p className="text-[#5e503f] text-sm font-['Jost']">
+                        Already have an account?{' '}
+                        <Link to="/login" className="text-[#a9927d] font-medium hover:text-[#8c7a6b] transition-colors underline">
+                            Sign in
+                        </Link>
+                    </p>
+                </div>
+            </div>
         </div>
-      </div>
     );
-  };
-  
-  export default Register;
+};
+
+export default Register;
