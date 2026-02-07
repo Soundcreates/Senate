@@ -3,7 +3,7 @@ import { motion, useInView, AnimatePresence } from 'framer-motion'
 import {
   Brain, Shield, Zap, BarChart3, Users, ArrowRight, ChevronDown,
   Github, Twitter, Lock, Sparkles, DollarSign, CheckCircle2, Star,
-  Layers, Bot, Wallet, GanttChart, Scale, Menu, X
+  Layers, Bot, Wallet, GanttChart, Scale, Menu, X, Disc
 } from 'lucide-react'
 import VideoBackground, { getVideoByIndex } from '../components/VideoBackground'
 
