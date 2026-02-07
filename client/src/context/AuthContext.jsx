@@ -42,14 +42,40 @@ export const AuthProvider = ({ children }) => {
 
   const clearUser = React.useCallback(() => setUser(null), [setUser]);
 
+  const fetchUserProfile = React.useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/oauth/session', {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        return { ok: false };
+      }
+
+      const data = await response.json();
+      if (data?.user) {
+        setUser(data.user);
+        return { ok: true, user: data.user };
+      }
+
+      return { ok: false };
+    } catch (error) {
+      console.error('Failed to fetch user profile:', error);
+      return { ok: false, error };
+    }
+  }, [setUser]);
+
   const value = useMemo(
     () => ({
       user,
       setUser,
       clearUser,
+      fetchUserProfile,
       isAuthenticated: Boolean(user),
     }),
-    [user, setUser, clearUser]
+    [user, setUser, clearUser, fetchUserProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

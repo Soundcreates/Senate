@@ -2,7 +2,8 @@
 import React, { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
-import { MoreHorizontal, Plus, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MoreHorizontal, Plus, Clock, CheckCircle2, AlertCircle, User } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 const TASKS = [
   { id: 1, title: 'Implement Authentication', status: 'In Progress', priority: 'High', assignee: 'Sarah Chen' },
@@ -21,9 +22,9 @@ const PRODUCTIVITY_DATA = [
   { name: 'Sat', completed: 2, efficiency: 80 },
   { name: 'Sun', completed: 1, efficiency: 75 },
 ];
-
 const Dashboard = () => {
   const containerRef = useRef(null);
+  const {fetchUserProfile,user} = useAuth();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -60,9 +61,18 @@ const Dashboard = () => {
         ease: 'power2.out',
       });
     }, containerRef);
+    const fetchData = async () => {
+       await fetchUserProfile();
+      
+    }
+    fetchData();
 
     return () => ctx.revert();
   }, []);
+
+  useEffect(() => {
+    console.log("User data: ", user);
+  },[]);
 
   return (
     <div ref={containerRef} className="p-8 min-h-screen bg-zinc-950 text-white ml-64 overflow-hidden">
