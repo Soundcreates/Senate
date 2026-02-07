@@ -35,9 +35,37 @@ const Admin = () => {
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [expandedPerson, setExpandedPerson] = useState(null);
+  const [loadingStage, setLoadingStage] = useState(0);
 
   // Calculate progress percentage
   const progress = (step / 8) * 100;
+
+  // Multi-stage loading messages
+  const loadingMessages = [
+    { text: 'Analyzing project requirements...', duration: 0 },
+    { text: 'Searching talent database...', duration: 15000 },
+    { text: 'Evaluating skill matches...', duration: 30000 },
+    { text: 'Ranking candidates...', duration: 50000 },
+    { text: 'Finalizing recommendations...', duration: 70000 },
+  ];
+
+  // Effect to cycle through loading stages
+  React.useEffect(() => {
+    if (!isLoading && !isLoadingRecommendations) {
+      setLoadingStage(0);
+      return;
+    }
+
+    const intervals = loadingMessages.map((msg, idx) => {
+      return setTimeout(() => {
+        if (isLoading || isLoadingRecommendations) {
+          setLoadingStage(idx);
+        }
+      }, msg.duration);
+    });
+
+    return () => intervals.forEach(clearTimeout);
+  }, [isLoading, isLoadingRecommendations]);
 
   const generateTitle = async (prompt) => {
     try {
@@ -125,6 +153,8 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
 
         console.log('[Admin] RAG data received:', ragData);
         console.log('[Admin] RAG data type:', typeof ragData, Array.isArray(ragData));
+        console.log('[Admin] RAG data keys:', Object.keys(ragData || {}));
+        console.log('[Admin] RAG data stringified:', JSON.stringify(ragData));
 
         // Check if this is just a workflow start message (n8n returns this when configured for immediate response)
         if (ragData.message === 'Workflow was started') {
@@ -138,24 +168,39 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
           if (Array.isArray(ragData)) {
             // Direct array of people
             people = ragData;
+            console.log('[Admin] Using direct array format');
           } else if (ragData.name && ragData.userid) {
             // Single person object - wrap in array
             people = [ragData];
             console.log('[Admin] Received single person object, converted to array');
           } else if (ragData.recommendations && Array.isArray(ragData.recommendations)) {
             people = ragData.recommendations;
+            console.log('[Admin] Using ragData.recommendations');
           } else if (ragData.team && Array.isArray(ragData.team)) {
             people = ragData.team;
+            console.log('[Admin] Using ragData.team');
           } else if (ragData.people && Array.isArray(ragData.people)) {
             people = ragData.people;
+            console.log('[Admin] Using ragData.people');
           } else if (ragData.data) {
             // Check if data property contains recommendations
+            console.log('[Admin] Found nested data field:', ragData.data);
             if (Array.isArray(ragData.data)) {
               people = ragData.data;
+              console.log('[Admin] Using ragData.data as array');
             } else if (ragData.data.name && ragData.data.userid) {
               people = [ragData.data];
+              console.log('[Admin] Using ragData.data as single person');
+            } else if (ragData.data.recommendations) {
+              people = ragData.data.recommendations;
+              console.log('[Admin] Using ragData.data.recommendations');
+            } else if (ragData.data.people) {
+              people = ragData.data.people;
+              console.log('[Admin] Using ragData.data.people');
             }
           }
+
+          console.log('[Admin] Extracted people array:', people);
 
           // Format people to match expected structure
           if (people.length > 0) {
@@ -403,9 +448,48 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
       {step === 5 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px' }}>
           {isLoading ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-              <Loader2 className="animate-spin" size={24} style={{ color: '#a9927d' }} />
-              <span style={{ color: '#a9927d' }}>Generating...</span>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              >
+                <Loader2 size={32} style={{ color: '#a9927d' }} />
+              </motion.div>
+              <motion.div
+                key={loadingStage}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                style={{ textAlign: 'center' }}
+              >
+                <span style={{ color: '#a9927d', fontSize: '14px', fontWeight: 500 }}>
+                  {loadingMessages[loadingStage]?.text || 'Generating...'}
+                </span>
+                <div style={{ 
+                  width: '200px', 
+                  height: '3px', 
+                  background: 'rgba(169,146,125,0.2)', 
+                  borderRadius: '2px', 
+                  marginTop: '12px',
+                  overflow: 'hidden'
+                }}>
+                  <motion.div
+                    style={{ 
+                      height: '100%', 
+                      background: '#a9927d', 
+                      borderRadius: '2px' 
+                    }}
+                    initial={{ width: '0%' }}
+                    animate={{ width: '100%' }}
+                    transition={{ 
+                      duration: loadingMessages[loadingStage + 1] 
+                        ? (loadingMessages[loadingStage + 1].duration - loadingMessages[loadingStage].duration) / 1000 
+                        : 20,
+                      ease: 'linear'
+                    }}
+                  />
+                </div>
+              </motion.div>
             </div>
           ) : (
             <>
@@ -484,9 +568,45 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
                     </div>
                   )}
                   {isLoadingRecommendations ? (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0', flexDirection: 'column', gap: '8px' }}>
-                      <Loader2 className="animate-spin" size={20} style={{ color: '#a9927d' }} />
-                      <span style={{ fontSize: '11px', color: '#a9927d' }}>Loading recommendations...</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px 0', flexDirection: 'column', gap: '12px' }}>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      >
+                        <Loader2 size={24} style={{ color: '#a9927d' }} />
+                      </motion.div>
+                      <motion.span
+                        key={loadingStage}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.5 }}
+                        style={{ fontSize: '12px', color: '#a9927d', fontWeight: 500 }}
+                      >
+                        {loadingMessages[loadingStage]?.text || 'Loading recommendations...'}
+                      </motion.span>
+                      <div style={{ 
+                        width: '160px', 
+                        height: '2px', 
+                        background: 'rgba(169,146,125,0.2)', 
+                        borderRadius: '2px',
+                        overflow: 'hidden'
+                      }}>
+                        <motion.div
+                          style={{ 
+                            height: '100%', 
+                            background: '#a9927d', 
+                            borderRadius: '2px' 
+                          }}
+                          initial={{ width: '0%' }}
+                          animate={{ width: '100%' }}
+                          transition={{ 
+                            duration: loadingMessages[loadingStage + 1] 
+                              ? (loadingMessages[loadingStage + 1].duration - loadingMessages[loadingStage].duration) / 1000 
+                              : 20,
+                            ease: 'linear'
+                          }}
+                        />
+                      </div>
                     </div>
                   ) : (
                     top5People.map((person, index) => (
