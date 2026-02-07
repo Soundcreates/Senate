@@ -8,6 +8,7 @@ const GITHUB_USER_URL = "https://api.github.com/user";
 const GITHUB_EMAILS_URL = "https://api.github.com/user/emails";
 const User = require("../models/UserSchema");
 const MANUAL_EMAIL_COOKIE = "manual_email";
+const ROLE_COOKIE = "manual_role";
 const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
 const WAKATIME_REDIRECT_COOKIE = "wakatime_redirect";
 
@@ -195,7 +196,7 @@ async function HandleWakaTimeOAuth(req, res) {
 
 async function HandleGithubOAuth(req, res) {
 	console.log("Backend starting github oauth");
-	const { code, error, error_description: errorDescription, manualEmail } = req.query;
+	const { code, error, error_description: errorDescription, manualEmail, role } = req.query;
 	const clientId = process.env.GITHUB_CLIENT_ID;
 	const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
@@ -215,6 +216,14 @@ async function HandleGithubOAuth(req, res) {
 	if (!code) {
 		if (manualEmail) {
 			res.cookie(MANUAL_EMAIL_COOKIE, manualEmail.trim().toLowerCase(), {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 15 * 60 * 1000,
+			});
+		}
+		if (role === "admin" || role === "developer") {
+			res.cookie(ROLE_COOKIE, role, {
 				httpOnly: true,
 				sameSite: "lax",
 				secure: process.env.NODE_ENV === "production",
@@ -295,6 +304,7 @@ async function HandleGithubOAuth(req, res) {
 
 		const cookies = parseCookies(req);
 		const manualEmailFromCookie = cookies[MANUAL_EMAIL_COOKIE];
+		const roleFromCookie = cookies[ROLE_COOKIE];
 		const lookupEmail = manualEmailFromCookie || email;
 
 		const userQuery = lookupEmail
@@ -316,10 +326,21 @@ async function HandleGithubOAuth(req, res) {
 			scope: tokenData.scope || null,
 		};
 
+		if (roleFromCookie === "admin" || roleFromCookie === "developer") {
+			user.role = roleFromCookie;
+		}
+
 		await user.save();
 
 		if (manualEmailFromCookie) {
 			res.clearCookie(MANUAL_EMAIL_COOKIE, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+			});
+		}
+		if (roleFromCookie) {
+			res.clearCookie(ROLE_COOKIE, {
 				httpOnly: true,
 				sameSite: "lax",
 				secure: process.env.NODE_ENV === "production",
@@ -363,10 +384,20 @@ async function getSessionUser(req, res) {
 			email: user.email,
 			avatarUrl: user.avatarUrl || null,
 			provider: user.provider || "wakatime",
+			role: user.role || "developer",
 			githubConnected: Boolean(user.githubTokens?.accessToken || user.githubId),
 			wakatimeConnected: Boolean(user.wakatimeTokens?.accessToken),
 		},
 	});
 }
 
-module.exports = { HandleWakaTimeOAuth, HandleGithubOAuth, getSessionUser };
+function logoutUser(req, res) {
+	res.clearCookie("session_user", {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: process.env.NODE_ENV === "production",
+	});
+	return res.status(200).json({ ok: true });
+}
+
+module.exports = { HandleWakaTimeOAuth, HandleGithubOAuth, getSessionUser, logoutUser };

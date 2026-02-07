@@ -4,6 +4,7 @@ import { gsap } from 'gsap';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { MoreHorizontal, Plus, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import AdminDashboard from './AdminDashboard';
 
 const TASKS = [
   { id: 1, title: 'Implement Authentication', status: 'In Progress', priority: 'High', assignee: 'Sarah Chen' },
@@ -24,7 +25,7 @@ const PRODUCTIVITY_DATA = [
 ];
 const Dashboard = () => {
   const containerRef = useRef(null);
-  const { fetchUserProfile, user } = useAuth();
+  const { fetchUserProfile, user, logout } = useAuth();
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -79,7 +80,9 @@ const Dashboard = () => {
         { label: 'Resume URL', value: user.resume || '—' },
       ]
     : [];
-
+    if(user.role === "admin"){
+       return <AdminDashboard />
+    }
   return (
     <div ref={containerRef} className="p-8 min-h-screen bg-zinc-950 text-white ml-64 overflow-hidden">
       <div className="dashboard-header flex justify-between items-end mb-8">
@@ -90,6 +93,12 @@ const Dashboard = () => {
           <p className="text-zinc-400">Overview of project progress and team productivity.</p>
         </div>
         <div className="flex gap-4">
+          <button
+            onClick={logout}
+            className="bg-zinc-800 text-white px-4 py-2 rounded-xl hover:bg-zinc-700 transition-colors"
+          >
+            Logout
+          </button>
           <button className="bg-zinc-800 text-white px-4 py-2 rounded-xl hover:bg-zinc-700 transition-colors flex items-center gap-2">
             <Clock size={18} /> Time Logs
           </button>

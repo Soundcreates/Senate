@@ -1,18 +1,24 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { Clock, ArrowRight, Layers } from 'lucide-react';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
 import { useAuth } from '../context/AuthContext';
+import { loginAdmin } from '@/Apis/admin-authApi';
 
 
 const Login = () => {
     const containerRef = useRef(null);
     const step = 1;
+    const [roleChoice, setRoleChoice] = useState(null);
+    const [adminEmail, setAdminEmail] = useState('');
+    const [adminPassword, setAdminPassword] = useState('');
+    const [adminError, setAdminError] = useState('');
+    const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
-    const { setUser } = useAuth();
+    const { setUser, setToken } = useAuth();
   
     useEffect(() => {
       const ctx = gsap.context(() => {
@@ -57,6 +63,28 @@ const Login = () => {
       console.log("Starting wakatime login");
       startWakatimeOAuth("login");
     }
+
+    const handleAdminLogin = async () => {
+      if (isSubmittingAdmin) return;
+      const trimmedEmail = adminEmail.trim().toLowerCase();
+      if (!trimmedEmail || !adminPassword) {
+        setAdminError('Email and password are required.');
+        return;
+      }
+
+      setAdminError('');
+      setIsSubmittingAdmin(true);
+      const result = await loginAdmin({ email: trimmedEmail, password: adminPassword });
+      if (!result.ok) {
+        setAdminError('Invalid credentials.');
+        setIsSubmittingAdmin(false);
+        return;
+      }
+
+      setToken(result.token);
+      setUser(result.user);
+      navigate('/dashboard');
+    };
       
   
     return (
@@ -82,29 +110,84 @@ const Login = () => {
               Welcome Back
             </h1>
             <p className="text-zinc-500 text-sm mt-2">
-              Sign in with WakaTime to continue.
+              {roleChoice === 'admin' ? 'Sign in as admin.' : 'Sign in with WakaTime to continue.'}
             </p>
           </div>
   
           <div className="space-y-6">
-            <div className="space-y-4">
-                <button 
-                  onClick={handleWakatimeLogin}
-                  className="w-full bg-[#2c2c2c] hover:bg-[#383838] text-white py-4 rounded-2xl font-bold border border-zinc-700 transition-all flex items-center justify-between px-6 group"
+            {!roleChoice && (
+              <div className="space-y-4">
+                <p className="text-xs text-center text-zinc-500">Choose your role to continue.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setRoleChoice('developer')}
+                    className="rounded-2xl px-4 py-3 text-sm font-medium bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition-all"
+                  >
+                    Developer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoleChoice('admin')}
+                    className="rounded-2xl px-4 py-3 text-sm font-medium bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition-all"
+                  >
+                    Admin
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {roleChoice === 'developer' && (
+              <div className="space-y-4">
+                  <button 
+                    onClick={handleWakatimeLogin}
+                    className="w-full bg-[#2c2c2c] hover:bg-[#383838] text-white py-4 rounded-2xl font-bold border border-zinc-700 transition-all flex items-center justify-between px-6 group"
+                  >
+                       <div className="flex items-center gap-4">
+                      <Clock className="text-blue-400" size={24} />
+                          <div className="text-left">
+                        <span className="block text-sm font-medium">Continue with WakaTime</span>
+                        <span className="block text-xs text-zinc-500">Secure OAuth Login</span>
+                          </div>
+                      </div>
+                       <ArrowRight className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" size={20}/>
+                  </button>
+                  <p className="text-xs text-center text-zinc-500">
+                    We use WakaTime to sign you in with your email.
+                  </p>
+              </div>
+            )}
+
+            {roleChoice === 'admin' && (
+              <div className="space-y-4">
+                <label className="block text-sm text-zinc-400 text-left">Admin email</label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  onChange={(event) => setAdminEmail(event.target.value)}
+                  className="w-full rounded-2xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-transparent"
+                  placeholder="admin@example.com"
+                />
+                <label className="block text-sm text-zinc-400 text-left">Password</label>
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(event) => setAdminPassword(event.target.value)}
+                  className="w-full rounded-2xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-transparent"
+                  placeholder="••••••••"
+                />
+                {adminError && (
+                  <p className="text-xs text-red-400 text-left">{adminError}</p>
+                )}
+                <button
+                  onClick={handleAdminLogin}
+                  disabled={isSubmittingAdmin}
+                  className="w-full bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-2xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                     <div className="flex items-center gap-4">
-                    <Clock className="text-blue-400" size={24} />
-                        <div className="text-left">
-                      <span className="block text-sm font-medium">Continue with WakaTime</span>
-                      <span className="block text-xs text-zinc-500">Secure OAuth Login</span>
-                        </div>
-                    </div>
-                     <ArrowRight className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" size={20}/>
+                  {isSubmittingAdmin ? 'Signing in...' : 'Sign in as Admin'}
                 </button>
-                <p className="text-xs text-center text-zinc-500">
-                  We use WakaTime to sign you in with your email.
-                </p>
-            </div>
+              </div>
+            )}
           </div>
   
           <div className="mt-8 text-center pt-6 border-t border-zinc-800">

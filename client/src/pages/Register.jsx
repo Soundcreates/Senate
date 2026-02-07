@@ -6,13 +6,21 @@ import { useAuth } from '../context/AuthContext';
 import { startGithubLogin } from '@/Apis/github-authApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
 import { uploadResume } from '@/Apis/resumeApi';
+import { registerAdmin } from '@/Apis/admin-authApi';
 
 const Register = () => {
     const containerRef = useRef(null);
     const oauthProcessedRef = useRef(false);
     const [step, setStep] = useState(1);
+    const [roleChoice, setRoleChoice] = useState(null);
     const [manualEmail, setManualEmail] = useState('');
     const [manualEmailError, setManualEmailError] = useState('');
+    const [role, setRole] = useState('developer');
+    const [adminEmail, setAdminEmail] = useState('');
+    const [adminPassword, setAdminPassword] = useState('');
+    const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
+    const [adminError, setAdminError] = useState('');
+    const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
     const [wakatimeConnected, setWakatimeConnected] = useState(false);
     const [githubConnected, setGithubConnected] = useState(false);
     const [resumeFile, setResumeFile] = useState(null);
@@ -20,7 +28,7 @@ const Register = () => {
     const [isUploadingResume, setIsUploadingResume] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
-    const { setUser } = useAuth();
+    const { setUser, setToken } = useAuth();
   
     useEffect(() => {
       const ctx = gsap.context(() => {
@@ -50,7 +58,42 @@ const Register = () => {
     };
 
     const handleGithubConnect = () => {
-        startGithubLogin(manualEmail.trim(), "register");
+        startGithubLogin(manualEmail.trim(), "register", role);
+    };
+
+    const handleRoleContinue = () => {
+        if (roleChoice === 'admin') {
+            setRole('admin');
+            return;
+        }
+        setRole('developer');
+        setStep(1);
+    };
+
+    const handleAdminRegister = async () => {
+        if (isSubmittingAdmin) return;
+        const trimmedEmail = adminEmail.trim().toLowerCase();
+        if (!trimmedEmail || !adminPassword) {
+            setAdminError('Email and password are required.');
+            return;
+        }
+        if (adminPassword !== adminPasswordConfirm) {
+            setAdminError('Passwords do not match.');
+            return;
+        }
+
+        setAdminError('');
+        setIsSubmittingAdmin(true);
+        const result = await registerAdmin({ email: trimmedEmail, password: adminPassword, name: 'Admin' });
+        if (!result.ok) {
+            setAdminError(result.error === 'email_in_use' ? 'Email already in use.' : 'Registration failed.');
+            setIsSubmittingAdmin(false);
+            return;
+        }
+
+        setToken(result.token);
+        setUser(result.user);
+        navigate('/dashboard');
     };
 
     const handleManualEmailContinue = () => {
@@ -90,6 +133,7 @@ const Register = () => {
     };
 
     const getProgress = () => {
+        if (roleChoice !== 'developer') return 0;
         return (step / 4) * 100;
     };
 
@@ -105,6 +149,8 @@ const Register = () => {
             const result = await fetchWakatimeSession();
             if (result.ok && result.user) {
                 setUser(result.user);
+                setRoleChoice('developer');
+                setRole('developer');
                 setWakatimeConnected(Boolean(result.user.wakatimeConnected));
                 setGithubConnected(Boolean(result.user.githubConnected));
                 if (provider === 'wakatime') {
@@ -141,13 +187,98 @@ const Register = () => {
               Create Account
             </h1>
             <p className="text-zinc-400 text-base">
-                Step {step} of 4: {step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}
+                {roleChoice === 'admin'
+                    ? 'Create an admin account'
+                    : roleChoice === 'developer'
+                        ? `Step ${step} of 4: ${step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
+                        : 'Choose your role to begin'}
             </p>
           </div>
   
           <div className="space-y-6">
+            {/* Step 0: Role Selection */}
+            {!roleChoice && (
+                <div className="space-y-5">
+                    <div className="space-y-2">
+                        <p className="text-sm text-zinc-400 text-left">Select your role</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setRoleChoice('developer')}
+                                className={`rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+                                    roleChoice === 'developer'
+                                        ? 'bg-zinc-500 text-white'
+                                        : 'bg-zinc-600 text-zinc-300 hover:bg-zinc-500/70'
+                                }`}
+                            >
+                                Developer
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setRoleChoice('admin')}
+                                className={`rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+                                    roleChoice === 'admin'
+                                        ? 'bg-zinc-500 text-white'
+                                        : 'bg-zinc-600 text-zinc-300 hover:bg-zinc-500/70'
+                                }`}
+                            >
+                                Admin
+                            </button>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleRoleContinue}
+                        disabled={!roleChoice}
+                        className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Continue
+                    </button>
+                </div>
+            )}
+
+            {/* Admin Registration */}
+            {roleChoice === 'admin' && (
+                <div className="space-y-5">
+                    <div className="space-y-4">
+                        <label className="block text-sm text-zinc-400 text-left">Admin email</label>
+                        <input
+                            type="email"
+                            value={adminEmail}
+                            onChange={(event) => setAdminEmail(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="admin@example.com"
+                        />
+                        <label className="block text-sm text-zinc-400 text-left">Password</label>
+                        <input
+                            type="password"
+                            value={adminPassword}
+                            onChange={(event) => setAdminPassword(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
+                        <label className="block text-sm text-zinc-400 text-left">Confirm password</label>
+                        <input
+                            type="password"
+                            value={adminPasswordConfirm}
+                            onChange={(event) => setAdminPasswordConfirm(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
+                        {adminError && (
+                            <p className="text-sm text-red-400 text-left">{adminError}</p>
+                        )}
+                        <button
+                            onClick={handleAdminRegister}
+                            disabled={isSubmittingAdmin}
+                            className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isSubmittingAdmin ? 'Creating account...' : 'Create Admin Account'}
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* Step 1: WakaTime */}
-            {step === 1 && (
+            {roleChoice === 'developer' && step === 1 && (
                 <div className="space-y-5">
                     <button 
                         onClick={handleWakatimeConnect}
@@ -162,8 +293,8 @@ const Register = () => {
                 </div>
             )}
 
-            {/* Step 2: Email */}
-            {step === 2 && (
+                {/* Step 2: Email */}
+              {roleChoice === 'developer' && step === 2 && (
                  <div className="space-y-5">
                      <div className="bg-zinc-600 rounded-xl p-4 text-center">
                         <span className="text-sm text-zinc-300">✓ WakaTime Connected</span>
@@ -188,14 +319,14 @@ const Register = () => {
                              onClick={handleManualEmailContinue}
                              className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all"
                          >
-                             Continue to Wallet
+                             Continue to GitHub
                          </button>
                      </div>
                 </div>
             )}
 
             {/* Step 3: GitHub */}
-            {step === 3 && (
+            {roleChoice === 'developer' && step === 3 && (
                 <div className="space-y-5">
                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
                         <span className="text-sm text-zinc-300">✓ Email Confirmed</span>
@@ -220,7 +351,7 @@ const Register = () => {
             )}
 
             {/* Step 4: Resume */}
-            {step === 4 && (
+            {roleChoice === 'developer' && step === 4 && (
                 <div className="space-y-5">
                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
                         <span className="text-sm text-zinc-300">✓ GitHub Connected</span>

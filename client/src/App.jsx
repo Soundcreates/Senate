@@ -4,6 +4,9 @@ import LandingPage from './pages/LandingPage'
 import Register from './pages/Register'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Admin from './pages/Admin'
+import AdminDashboard from './pages/AdminDashboard'
+import ProjectDetail from './pages/ProjectDetail'
 import { AuthProvider } from './context/AuthContext'
 import Lenis from 'lenis'
 
@@ -23,15 +26,16 @@ function App() {
       // lenis.destroy()
     }
   }, [])
-
-  return (
+ return (
     <AuthProvider>
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path ="/dashboard" element={<Dashboard />} />
+          <Route path = "/login" element = {<Login />} />
+          <Route  path="/admin" element={<Admin />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/project/:id" element={<ProjectDetail />} />
         </Routes>
       </Router>
     </AuthProvider>
