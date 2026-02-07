@@ -7,13 +7,22 @@ const TOKEN_TTL = "7d";
 
 const buildUserPayload = (user) => ({
 	id: user._id.toString(),
-	name: user.name || "Admin",
+	name: user.name || "User",
 	email: user.email,
-	role: user.role || "admin",
+	role: user.role || "developer",
 	provider: user.provider || "local",
 	githubConnected: Boolean(user.githubTokens?.accessToken || user.githubId),
 	wakatimeConnected: Boolean(user.wakatimeTokens?.accessToken),
 });
+
+const setSessionCookie = (res, userId) => {
+	res.cookie("session_user", userId.toString(), {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: process.env.NODE_ENV === "production",
+		maxAge: 7 * 24 * 60 * 60 * 1000,
+	});
+};
 
 const signToken = (user) =>
 	jwt.sign({ sub: user._id.toString(), role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
@@ -56,6 +65,31 @@ async function registerAdmin(req, res) {
 	});
 }
 
+async function registerDeveloper(req, res) {
+	const { email, password, name } = req.body || {};
+	if (!email || !password) {
+		return res.status(400).json({ error: "missing_credentials" });
+	}
+
+	const normalizedEmail = String(email).trim().toLowerCase();
+	const existing = await User.findOne({ email: normalizedEmail });
+	if (existing) {
+		return res.status(409).json({ error: "email_in_use" });
+	}
+
+	const passwordHash = await bcrypt.hash(String(password), 10);
+	const user = await User.create({
+		email: normalizedEmail,
+		name: name ? String(name).trim() : "Developer",
+		role: "developer",
+		provider: "local",
+		passwordHash,
+	});
+
+	setSessionCookie(res, user._id);
+	return res.status(201).json({ ok: true, user: buildUserPayload(user) });
+}
+
 async function loginAdmin(req, res) {
 	if (!JWT_SECRET) {
 		return res.status(500).json({ error: "missing_jwt_secret" });
@@ -78,6 +112,27 @@ async function loginAdmin(req, res) {
 
 	const token = signToken(user);
 	return res.status(200).json({ ok: true, token, user: buildUserPayload(user) });
+}
+
+async function loginDeveloper(req, res) {
+	const { email, password } = req.body || {};
+	if (!email || !password) {
+		return res.status(400).json({ error: "missing_credentials" });
+	}
+
+	const normalizedEmail = String(email).trim().toLowerCase();
+	const user = await User.findOne({ email: normalizedEmail, role: "developer" });
+	if (!user || !user.passwordHash) {
+		return res.status(401).json({ error: "invalid_credentials" });
+	}
+
+	const matches = await bcrypt.compare(String(password), user.passwordHash);
+	if (!matches) {
+		return res.status(401).json({ error: "invalid_credentials" });
+	}
+
+	setSessionCookie(res, user._id);
+	return res.status(200).json({ ok: true, user: buildUserPayload(user) });
 }
 
 async function getAdminProfile(req, res) {
@@ -105,9 +160,21 @@ function logoutAdmin(_req, res) {
 	return res.status(200).json({ ok: true });
 }
 
+function logoutDeveloper(_req, res) {
+	res.clearCookie("session_user", {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: process.env.NODE_ENV === "production",
+	});
+	return res.status(200).json({ ok: true });
+}
+
 module.exports = {
 	registerAdmin,
+	registerDeveloper,
 	loginAdmin,
+	loginDeveloper,
 	getAdminProfile,
 	logoutAdmin,
+	logoutDeveloper,
 };

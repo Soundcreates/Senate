@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { fetchWakatimeStats } from '@/Apis/statApis';
-import { fetchTodayActivity, listProjectTasks, listProjects } from '@/Apis/projectApis';
+import { listProjectTasks, listProjects } from '@/Apis/projectApis';
+import { fetchRecentCommits } from '@/Apis/githubApi';
 
 const buildWeekRange = () => {
     const today = new Date();
@@ -124,13 +125,11 @@ const UserDashboard = () => {
                 });
                 setProjectTasks(tasksByProject);
 
-                const primaryProject = projectResult.projects?.[0];
-                if (primaryProject) {
-                    const activityResult = await fetchTodayActivity(primaryProject._id);
-                    if (activityResult.ok) {
-                        setRecentCommits(activityResult.data?.commits || []);
-                    }
-                }
+            }
+
+            const recentResult = await fetchRecentCommits(20);
+            if (isMounted && recentResult.ok) {
+                setRecentCommits(recentResult.commits || []);
             }
         };
 
@@ -149,12 +148,12 @@ const UserDashboard = () => {
         [wakatimeData]
     );
     const projectCards = useMemo(() => {
-        return projects.map((project, index) => {
+        return projects.map((project) => {
             const tasks = projectTasks[project._id] || [];
             const completed = tasks.filter((task) => task.status === 'done').length;
             const pending = tasks.filter((task) => task.status !== 'done').length;
             const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
-            const commits = index === 0 ? recentCommits.length : 0;
+            const commits = recentCommits.length;
             const pendingTasks = tasks
                 .filter((task) => task.status !== 'done')
                 .slice(0, 2)
@@ -425,7 +424,7 @@ const UserDashboard = () => {
                                     <div style={{ flex: 1 }}>
                                         <p style={{ fontSize: '14px', color: '#2d2a26', margin: 0, fontWeight: '500' }}>{commit.message || 'Commit'}</p>
                                         <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>
-                                            <span style={{ color: '#5e503f' }}>{projectCards[0]?.repoLabel || 'Repository'}</span> • main • {formatRelativeTime(commit.timestamp)}
+                                            <span style={{ color: '#5e503f' }}>{commit.repo || 'Repository'}</span> • {commit.branch || 'main'} • {formatRelativeTime(commit.timestamp)}
                                         </p>
                                     </div>
                                 </div>
