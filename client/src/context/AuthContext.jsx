@@ -1,19 +1,6 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
-
-
+import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 
 const AuthContext = createContext(null);
-const STORAGE_KEY = 'auth.user'; // Moving this might be overkill for now, but to really fix "react-refresh/only-export-components", we should not export non-components. However, STORAGE_KEY is not exported. The error likely comes from `loadStoredUser` if it was exported, but I removed it. Let's double check if I missed anything exported that is not a component.
-// Re-reading the previous error: "Fast refresh only works when a file only exports components."
-// userAuth is a hook (function), AuthProvider is a component.
-// The error might be a false positive or due to how `useAuth` is exported alongside `AuthProvider`.
-// Actually, it's fine to export hooks. 
-// Wait, I removed `loadStoredUser` in step 144. 
-// Let's try to just define STORAGE_KEY inside the component or outside but not export it (it's not exported).
-// The issue might be `useAuth` export. vite-plugin-react requires only components to be exported for HMR in some configs.
-// But exporting hooks is standard.
-// Let's try to move the context creation to a separate file or just keep it simple.
-// Actually, looking at the file content again.
 
 export const AuthProvider = ({ children }) => {
   const [user, setUserState] = useState(() => {
@@ -26,7 +13,7 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  const setUser = React.useCallback((nextUser) => {
+  const setUser = useCallback((nextUser) => {
     setUserState(nextUser || null);
 
     try {
@@ -40,9 +27,9 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const clearUser = React.useCallback(() => setUser(null), [setUser]);
+  const clearUser = useCallback(() => setUser(null), [setUser]);
 
-  const fetchUserProfile = React.useCallback(async () => {
+  const fetchUserProfile = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3000/api/oauth/session', {
         method: 'GET',

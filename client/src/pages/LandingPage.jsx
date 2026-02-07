@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { motion, useInView, AnimatePresence } from 'framer-motion'
+import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import {
   Brain, Shield, Zap, BarChart3, Users, ArrowRight, ChevronDown,
   Github, Twitter, Lock, Sparkles, DollarSign, CheckCircle2, Star,
-  Layers, Bot, Wallet, GanttChart, Scale, Menu, X, Disc
+  Layers, Bot, Wallet, GanttChart, Scale, Menu, X, Disc, Terminal, Database, ShieldCheck
 } from 'lucide-react'
-import VideoBackground, { getVideoByIndex } from '../components/VideoBackground'
+// import VideoBackground, { getVideoByIndex } from '../components/VideoBackground'
+import { Highlighter } from '../components/ui/highlighter'
+import { GridPattern } from '../components/ui/GridPattern'
+import { TeamMatchingSimulation } from '../components/simulations/TeamMatching'
+import { InstantPayoutSimulation } from '../components/simulations/InstantPayout'
 
 /* ════════════════════════════════════════════════════════════════════════════
    MINIMAL EARTH TONE LANDING PAGE
@@ -46,7 +50,7 @@ function Section({ children, className = '', id }) {
       style={{
         position: 'relative',
         padding: '160px 24px',
-        background: '#0a0908'
+        background: '#fbf7ef'
       }}
     >
       <div style={{ maxWidth: '1280px', margin: '0 auto' }}>{children}</div>
@@ -72,7 +76,7 @@ function FAQItem({ question, answer }) {
           textAlign: 'left',
           fontSize: '24px',
           fontWeight: '600',
-          color: '#f2f4f3',
+          color: '#2d2a26',
           cursor: 'pointer',
           transition: 'opacity 0.3s'
         }}
@@ -101,7 +105,7 @@ function FAQItem({ question, answer }) {
               paddingBottom: '24px',
               fontSize: '18px',
               lineHeight: '1.5',
-              color: 'rgba(242, 244, 243, 0.7)',
+              color: 'rgba(45, 42, 38, 0.7)',
               maxWidth: '83%'
             }}>
               {answer}
@@ -158,14 +162,14 @@ function Navigation() {
         transition: 'all 0.3s ease',
         boxShadow: scrolled ? '0 10px 40px rgba(0,0,0,0.4)' : 'none',
         borderRadius: '9999px',
-        background: scrolled ? 'rgba(10, 9, 8, 0.9)' : 'rgba(10, 9, 8, 0.7)',
+        background: scrolled ? 'rgba(28, 28, 28, 0.9)' : 'rgba(28, 28, 28, 0.7)',
         border: scrolled ? '1px solid rgba(94, 80, 63, 0.3)' : '1px solid rgba(94, 80, 63, 0.1)',
         backdropFilter: 'blur(12px)'
       }}>
         {/* Logo */}
         <a href="#" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
           <img src="/logo.png" alt="Senate" style={{ height: '24px', width: 'auto' }} />
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '18px', fontWeight: '600', color: '#f2f4f3' }}>Senate</span>
+          <span style={{ fontFamily: "'Jost', sans-serif", fontSize: '18px', fontWeight: '600', color: '#2d2a26' }}>Senate</span>
         </a>
 
         {/* Desktop Nav */}
@@ -174,12 +178,12 @@ function Navigation() {
             <a key={l.label} href={l.href} style={{
               fontSize: '14px',
               fontWeight: '500',
-              color: 'rgba(242, 244, 243, 0.7)',
+              color: 'rgba(45, 42, 38, 0.7)',
               textDecoration: 'none',
               transition: 'color 0.2s'
             }}
-              onMouseEnter={(e) => e.target.style.color = '#f2f4f3'}
-              onMouseLeave={(e) => e.target.style.color = 'rgba(242, 244, 243, 0.7)'}
+              onMouseEnter={(e) => e.target.style.color = '#2d2a26'}
+              onMouseLeave={(e) => e.target.style.color = 'rgba(45, 42, 38, 0.7)'}
             >
               {l.label}
             </a>
@@ -189,7 +193,7 @@ function Navigation() {
         {/* Action */}
         <button style={{
           background: '#a9927d',
-          color: '#0a0908',
+          color: '#fbf7ef',
           border: 'none',
           padding: '8px 20px',
           borderRadius: '9999px',
@@ -205,7 +209,7 @@ function Navigation() {
         </button>
 
         {/* Mobile Menu Toggle (Hidden on desktop) */}
-        <button className="mobile-menu-btn" style={{ display: 'none', background: 'none', border: 'none', color: '#f2f4f3' }}>
+        <button className="mobile-menu-btn" style={{ display: 'none', background: 'none', border: 'none', color: '#2d2a26' }}>
           <Menu size={20} />
         </button>
       </div>
@@ -224,9 +228,9 @@ function Hero() {
   }
 
   return (
-    <section style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', overflow: 'hidden' }}>
-      {/* Cinematic Video Background - Darker Overlay */}
-      <VideoBackground overlayOpacity={0.65} />
+    <section style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', overflow: 'hidden', background: '#fbf7ef' }}>
+      {/* Cinematic Video Background - REMOVED */}
+      {/* <VideoBackground overlayOpacity={0.65} /> */}
 
       {/* Origin Style Gradient Overlay at Bottom */}
       <div style={{
@@ -235,34 +239,29 @@ function Hero() {
         left: 0,
         right: 0,
         height: '40vh',
-        background: 'linear-gradient(to top, #0a0908, transparent)',
+        background: 'linear-gradient(to top, #fbf7ef, transparent)',
         zIndex: 5
       }} />
 
       <div style={{ position: 'relative', zIndex: 10, textAlign: 'center', maxWidth: '900px' }}>
-        <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={0}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 16px', borderRadius: '99px', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.15)', fontSize: '13px', fontWeight: '500', color: '#f2f4f3', marginBottom: '40px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#a9927d' }}></span>
-            AI-Native Project Management
-          </div>
-        </motion.div>
+
 
         <motion.h1 variants={fadeUp} initial="hidden" animate="visible" custom={1} style={{
           fontFamily: 'var(--font-serif)',
           fontSize: 'var(--font-hero)',
           lineHeight: '1.1',
           fontWeight: '500',
-          color: '#f2f4f3',
+          color: '#2d2a26',
           marginBottom: '24px',
           letterSpacing: '-0.03em'
         }}>
-          Fair pay for <i style={{ fontFamily: 'var(--font-serif)', color: '#a9927d' }}>actual work.</i>
+          Fair pay for <Highlighter color="rgba(169, 146, 125, 0.4)">actual work.</Highlighter>
         </motion.h1>
 
         <motion.p variants={fadeUp} initial="hidden" animate="visible" custom={2} style={{
           fontSize: '20px',
           lineHeight: '1.6',
-          color: 'rgba(242, 244, 243, 0.8)',
+          color: 'rgba(45, 42, 38, 0.8)',
           maxWidth: '600px',
           margin: '0 auto 48px',
           fontWeight: '300'
@@ -273,7 +272,7 @@ function Hero() {
         <motion.div variants={fadeUp} initial="hidden" animate="visible" custom={3} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
           <button style={{
             background: '#a9927d',
-            color: '#0a0908',
+            color: '#fbf7ef',
             border: 'none',
             padding: '16px 40px',
             borderRadius: '9999px',
@@ -298,15 +297,15 @@ function Hero() {
             maxWidth: '420px',
             cursor: 'text',
             borderRadius: '9999px',
-            border: '1px solid rgba(242, 244, 243, 0.1)',
-            background: 'rgba(242, 244, 243, 0.05)',
+            border: '1px solid rgba(45, 42, 38, 0.1)',
+            background: 'rgba(45, 42, 38, 0.05)',
             transition: 'all 0.2s ease'
           }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(242, 244, 243, 0.3)'; e.currentTarget.style.background = 'rgba(242, 244, 243, 0.08)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(242, 244, 243, 0.1)'; e.currentTarget.style.background = 'rgba(242, 244, 243, 0.05)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(45, 42, 38, 0.3)'; e.currentTarget.style.background = 'rgba(45, 42, 38, 0.08)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(45, 42, 38, 0.1)'; e.currentTarget.style.background = 'rgba(45, 42, 38, 0.05)' }}
           >
             <Sparkles size={16} color="#a9927d" />
-            <span style={{ fontSize: '14px', color: 'rgba(242, 244, 243, 0.5)' }}>"Find me a React dev for $5k..."</span>
+            <span style={{ fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)' }}>"Find me a React dev for $5k..."</span>
           </div>
         </motion.div>
       </div>
@@ -317,12 +316,19 @@ function Hero() {
 // ─── FEATURES (ORIGIN STYLE: BENTO GRID) ───
 function Features() {
   return (
-    <Section id="features" style={{ padding: 'var(--spacing-section-lg) 24px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <Section id="features" style={{ padding: 'var(--spacing-section-lg) 24px', position: 'relative', overflow: 'hidden' }}>
+      <GridPattern
+        width={50}
+        height={50}
+        x={-1}
+        y={-1}
+        className="absolute inset-0 h-full w-full fill-white/[0.02] stroke-white/[0.05] [mask-image:linear-gradient(to_bottom_right,white,transparent,transparent)]"
+      />
+      <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative', zIndex: 10 }}>
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '80px' }}>
-          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#f2f4f3', letterSpacing: '-0.02em' }}>
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>
             Everything you need. <br />
-            <span style={{ color: 'rgba(242, 244, 243, 0.5)' }}>Nothing you don't.</span>
+            <Highlighter color="rgba(169, 146, 125, 0.6)"><span style={{ color: 'rgba(45, 42, 38, 0.5)' }}>Nothing you don't.</span></Highlighter>
           </h2>
         </motion.div>
 
@@ -336,12 +342,12 @@ function Features() {
             viewport={{ once: true }}
             style={{
               gridColumn: 'span 7',
-              background: '#22333b',
+              background: '#ffffff', boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
               borderRadius: '32px',
               padding: '40px',
               position: 'relative',
               overflow: 'hidden',
-              border: '1px solid rgba(94, 80, 63, 0.3)',
+              border: '1px solid rgba(169, 146, 125, 0.2)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -349,33 +355,12 @@ function Features() {
           >
             <div style={{ position: 'relative', zIndex: 10 }}>
               <Brain style={{ width: '32px', height: '32px', color: '#a9927d', marginBottom: '24px' }} />
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#f2f4f3' }}>AI Team Matching</h3>
-              <p style={{ fontSize: '18px', color: 'rgba(242, 244, 243, 0.7)', maxWidth: '400px' }}>Semantic search across thousands of profiles. Get optimal team compositions in seconds.</p>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#2d2a26' }}>AI Team Matching</h3>
+              <p style={{ fontSize: '18px', color: 'rgba(45, 42, 38, 0.7)', maxWidth: '400px' }}>Semantic search across thousands of profiles. Get optimal team compositions in seconds.</p>
             </div>
-            {/* Floating UI Mockup */}
-            <div style={{
-              marginTop: '40px',
-              background: 'rgba(10, 9, 8, 0.6)',
-              borderRadius: '20px',
-              padding: '20px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(8px)',
-              transform: 'rotate(-2deg)',
-              width: '80%',
-              alignSelf: 'flex-end',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.3)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#a9927d' }} />
-                <div>
-                  <div style={{ width: '120px', height: '8px', background: 'rgba(255,255,255,0.2)', borderRadius: '4px', marginBottom: '6px' }} />
-                  <div style={{ width: '80px', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ padding: '4px 8px', borderRadius: '4px', background: 'rgba(169, 146, 125, 0.2)', fontSize: '10px', color: '#a9927d' }}>React</div>
-                <div style={{ padding: '4px 8px', borderRadius: '4px', background: 'rgba(169, 146, 125, 0.2)', fontSize: '10px', color: '#a9927d' }}>Node.js</div>
-              </div>
+            {/* Simulation */}
+            <div style={{ marginTop: '24px', height: '300px' }}>
+              <TeamMatchingSimulation />
             </div>
           </motion.div>
 
@@ -387,24 +372,23 @@ function Features() {
             transition={{ delay: 0.1 }}
             style={{
               gridColumn: 'span 5',
-              background: '#22333b',
+              background: '#ffffff', boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
               borderRadius: '32px',
               padding: '40px',
-              border: '1px solid rgba(94, 80, 63, 0.3)',
+              border: '1px solid rgba(169, 146, 125, 0.2)',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
-              backgroundImage: 'linear-gradient(135deg, rgba(34, 51, 59, 1) 0%, rgba(10, 9, 8, 1) 100%)'
+              justifyContent: 'space-between'
             }}
           >
             <div>
               <Zap style={{ width: '32px', height: '32px', color: '#a9927d', marginBottom: '24px' }} />
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#f2f4f3' }}>Instant Payouts</h3>
-              <p style={{ fontSize: '18px', color: 'rgba(242, 244, 243, 0.7)' }}>Milestone approved? Capital is in your wallet instantly.</p>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#2d2a26' }}>Instant Payouts</h3>
+              <p style={{ fontSize: '18px', color: 'rgba(45, 42, 38, 0.7)' }}>Milestone approved? Capital is in your wallet instantly.</p>
             </div>
 
-            <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontSize: '48px', fontWeight: '700', color: '#f2f4f3' }}>$5,000<span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.5)' }}>USDC</span></div>
+            <div style={{ marginTop: '24px', height: '180px' }}>
+              <InstantPayoutSimulation />
             </div>
           </motion.div>
 
@@ -416,18 +400,18 @@ function Features() {
             transition={{ delay: 0.2 }}
             style={{
               gridColumn: 'span 5',
-              background: '#22333b',
+              background: '#ffffff', boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
               borderRadius: '32px',
               padding: '40px',
-              border: '1px solid rgba(94, 80, 63, 0.3)',
+              border: '1px solid rgba(169, 146, 125, 0.2)',
               minHeight: '400px'
             }}
           >
             <BarChart3 style={{ width: '32px', height: '32px', color: '#a9927d', marginBottom: '24px' }} />
-            <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#f2f4f3' }}>Real-Time Scoring</h3>
+            <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#2d2a26' }}>Real-Time Scoring</h3>
             <ul style={{ listStyle: 'none', padding: 0, marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {['GitHub Commits', 'WakaTime Hours', 'Code Reviews', 'Jira Tickets'].map((item) => (
-                <li key={item} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242, 244, 243, 0.8)' }}>
+                <li key={item} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'rgba(45, 42, 38, 0.8)' }}>
                   <span>{item}</span>
                   <span style={{ color: '#a9927d' }}>Synced</span>
                 </li>
@@ -443,19 +427,18 @@ function Features() {
             transition={{ delay: 0.3 }}
             style={{
               gridColumn: 'span 7',
-              background: '#22333b',
+              background: '#ffffff', boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
               borderRadius: '32px',
               padding: '40px',
-              border: '1px solid rgba(94, 80, 63, 0.3)',
+              border: '1px solid rgba(169, 146, 125, 0.2)',
               position: 'relative',
               overflow: 'hidden'
             }}
           >
-            <VideoBackground src={getVideoByIndex(2)} overlayOpacity={0.8} />
             <div style={{ position: 'relative', zIndex: 10 }}>
               <Lock style={{ width: '32px', height: '32px', color: '#a9927d', marginBottom: '24px' }} />
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#f2f4f3' }}>Trustless Escrow</h3>
-              <p style={{ fontSize: '18px', color: 'rgba(242, 244, 243, 0.8)', maxWidth: '450px' }}>Funds are locked in audited smart contracts. Released only when the code ships and passes review.</p>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', marginBottom: '16px', color: '#2d2a26' }}>Trustless Escrow</h3>
+              <p style={{ fontSize: '18px', color: 'rgba(45, 42, 38, 0.8)', maxWidth: '450px' }}>Funds are locked in audited smart contracts. Released only when the code ships and passes review.</p>
             </div>
           </motion.div>
 
@@ -474,31 +457,89 @@ function Features() {
 }
 
 function HowItWorks() {
+  const containerRef = useRef(null)
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ['start start', 'end end']
+  })
+
+  // Transform vertical scroll to horizontal movement
+  // Move from 0% to -75% (showing 4 items, we need to move 3 widths)
+  const x = useTransform(scrollYProgress, [0, 1], ['0%', '-75%'])
+
+  const steps = [
+    { step: '01', title: 'Create Project', desc: 'Describe your requirements. AI matches you with the perfect team.' },
+    { step: '02', title: 'Fund Escrow', desc: 'Deposit USDC into the smart contract. Funds are safe.' },
+    { step: '03', title: 'Track Work', desc: 'Real-time productivity scoring verifies progress.' },
+    { step: '04', title: 'Instant Payout', desc: 'Disputes resolved, funds released automatically.' },
+  ]
+
   return (
-    <Section id="how-it-works" style={{ padding: 'var(--spacing-section-lg) 24px' }}>
-      {/* ... keeping simplified list for brevity, but matching typography ... */}
-      <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
-        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '48px', marginBottom: '64px', color: '#f2f4f3' }}>How It Works</h2>
-        {/* ... (Existing steps content but updated styling would go here - abbreviated for this refactor step to focus on major layout changes) ... */}
-        {/* Reusing existing steps data temporarily for structure stability */}
-        <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '48px' }}>
-          {[
-            { step: '01', title: 'Create Project', desc: 'Describe your requirements. AI matches you with the perfect team.' },
-            { step: '02', title: 'Fund Escrow', desc: 'Deposit USDC into the smart contract. Funds are safe.' },
-            { step: '03', title: 'Track Work', desc: 'Real-time productivity scoring verifies progress.' },
-            { step: '04', title: 'Instant Payout', desc: 'Disputes resolved, funds released automatically.' },
-          ].map((s) => (
-            <div key={s.step} style={{ display: 'flex', gap: '24px', alignItems: 'baseline' }}>
-              <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#a9927d' }}>{s.step}</span>
-              <div>
-                <h3 style={{ fontSize: '24px', fontWeight: '500', marginBottom: '8px', color: '#f2f4f3' }}>{s.title}</h3>
-                <p style={{ color: 'rgba(242, 244, 243, 0.6)' }}>{s.desc}</p>
+    <div ref={containerRef} id="how-it-works" style={{ height: '300vh', position: 'relative' }}>
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        height: '100vh',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        background: '#fbf7ef'
+      }}>
+
+        {/* Horizontal Moving Track */}
+        <motion.div style={{ x, display: 'flex', gap: '40px', paddingLeft: '10vw' }}>
+
+          {/* Intro Card */}
+          <div style={{ minWidth: '40vw', paddingRight: '60px' }}>
+            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '64px', fontWeight: '500', color: '#2d2a26', lineHeight: '1.1' }}>
+              How Senate <br />
+              <Highlighter color="rgba(169, 146, 125, 0.6)"><span style={{ color: 'rgba(45, 42, 38, 0.5)' }}>Works</span></Highlighter>
+            </h2>
+            <p style={{ marginTop: '24px', fontSize: '20px', color: 'rgba(45, 42, 38, 0.7)', maxWidth: '400px' }}>
+              A seamless flow from proposal to payout. Scroll to explore the protocol.
+            </p>
+          </div>
+
+          {/* Steps */}
+          {steps.map((s, i) => (
+            <div key={s.step} style={{
+              minWidth: '600px',
+              height: '400px',
+              background: '#ffffff',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.04)',
+              borderRadius: '32px',
+              padding: '48px',
+              border: '1px solid rgba(169, 146, 125, 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              position: 'relative'
+            }}>
+              <div style={{ fontSize: '120px', fontWeight: '700', color: 'rgba(169, 146, 125, 0.1)', position: 'absolute', top: '20px', right: '40px', lineHeight: 1 }}>
+                {s.step}
               </div>
+
+              <div>
+                <div style={{ display: 'inline-block', padding: '6px 12px', borderRadius: '99px', background: 'rgba(169, 146, 125, 0.2)', color: '#a9927d', fontSize: '14px', fontWeight: 'bold', marginBottom: '24px' }}>
+                  Step {s.step}
+                </div>
+                <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '40px', color: '#2d2a26', marginBottom: '16px' }}>{s.title}</h3>
+                <p style={{ fontSize: '20px', color: 'rgba(45, 42, 38, 0.7)', lineHeight: '1.6' }}>{s.desc}</p>
+              </div>
+
+              {/* Connecting Line Visual */}
+              {i < steps.length - 1 && (
+                <div style={{ position: 'absolute', right: '-40px', top: '50%', width: '40px', height: '2px', background: 'rgba(94, 80, 63, 0.3)' }} />
+              )}
             </div>
           ))}
-        </div>
+
+          {/* End Spacer */}
+          <div style={{ minWidth: '10vw' }} />
+        </motion.div>
+
       </div>
-    </Section>
+    </div>
   )
 }
 
@@ -507,18 +548,17 @@ function Comparison() {
   return (
     <Section id="comparison">
       <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '64px' }}>
-        <span style={{ display: 'inline-block', padding: '6px 16px', borderRadius: '20px', border: '1px solid rgba(94, 80, 63, 0.3)', background: 'rgba(34, 51, 59, 0.6)', fontSize: '13px', fontWeight: '500', color: '#a9927d', marginBottom: '16px' }}>The Proof</span>
-        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#f2f4f3', letterSpacing: '-0.02em' }}>See how Senate <span style={{ color: 'rgba(242, 244, 243, 0.6)' }}>stacks up</span></h2>
-        <p style={{ fontSize: '22px', color: 'rgba(242, 244, 243, 0.6)', maxWidth: '680px', margin: '16px auto 0' }}>Compare Senate against traditional platforms across the metrics that matter most.</p>
+        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>See how Senate <Highlighter color="rgba(169, 146, 125, 0.6)"><span style={{ color: 'rgba(45, 42, 38, 0.5)' }}>stacks up</span></Highlighter></h2>
+        <p style={{ fontSize: '22px', color: 'rgba(45, 42, 38, 0.6)', maxWidth: '680px', margin: '16px auto 0' }}>Compare Senate against traditional platforms across the metrics that matter most.</p>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(94, 80, 63, 0.3)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: '640px', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(94, 80, 63, 0.2)', background: '#22333b' }}>
+              <tr style={{ borderBottom: '1px solid rgba(94, 80, 63, 0.2)', background: 'rgba(169, 146, 125, 0.1)' }}>
                 <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '14px', fontWeight: '600', color: '#5e503f' }}>Feature</th>
-                <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '14px', fontWeight: '600', color: '#f2f4f3' }}>Senate</th>
+                <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '14px', fontWeight: '600', color: '#2d2a26' }}>Senate</th>
                 <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '14px', fontWeight: '600', color: '#5e503f' }}>Upwork</th>
                 <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '14px', fontWeight: '600', color: '#5e503f' }}>Gitcoin</th>
                 <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '14px', fontWeight: '600', color: '#5e503f' }}>Escrow.com</th>
@@ -534,14 +574,14 @@ function Comparison() {
                 { feature: 'Dispute Resolution', senate: 'Multi-path', upwork: 'Manual', gitcoin: 'None', escrow: 'Manual', highlight: false },
                 { feature: 'Merit-Based Pay', senate: 'Algorithmic', upwork: 'Flat rate', gitcoin: 'Flat rate', escrow: 'Flat rate', highlight: true },
               ].map((row, i) => (
-                <tr key={row.feature} style={{ borderBottom: '1px solid rgba(94, 80, 63, 0.1)', background: i % 2 === 0 ? 'rgba(34, 51, 59, 0.4)' : 'transparent' }}>
-                  <td style={{ padding: '16px 24px', fontSize: '14px', fontWeight: '500', color: '#f2f4f3' }}>{row.feature}</td>
+                <tr key={row.feature} style={{ borderBottom: '1px solid rgba(94, 80, 63, 0.1)', background: i % 2 === 0 ? 'rgba(169, 146, 125, 0.05)' : 'transparent' }}>
+                  <td style={{ padding: '16px 24px', fontSize: '14px', fontWeight: '500', color: '#2d2a26' }}>{row.feature}</td>
                   <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                    <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '28px', background: row.highlight ? 'rgba(169, 146, 125, 0.2)' : 'transparent', fontSize: '14px', fontWeight: '600', color: row.highlight ? '#a9927d' : '#f2f4f3' }}>{row.senate}</span>
+                    <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '28px', background: row.highlight ? 'rgba(169, 146, 125, 0.2)' : 'transparent', fontSize: '14px', fontWeight: '600', color: row.highlight ? '#a9927d' : '#2d2a26' }}>{row.senate}</span>
                   </td>
-                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(242, 244, 243, 0.5)' }}>{row.upwork}</td>
-                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(242, 244, 243, 0.5)' }}>{row.gitcoin}</td>
-                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(242, 244, 243, 0.5)' }}>{row.escrow}</td>
+                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)' }}>{row.upwork}</td>
+                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)' }}>{row.gitcoin}</td>
+                  <td style={{ padding: '16px 24px', textAlign: 'center', fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)' }}>{row.escrow}</td>
                 </tr>
               ))}
             </tbody>
@@ -562,7 +602,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0908', color: '#f2f4f3', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#fbf7ef', color: '#2d2a26', fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <style>{`
         :root {
           --font-serif: 'Playfair Display', serif;
@@ -602,7 +642,7 @@ export default function LandingPage() {
             { value: 3, suffix: 's', prefix: '<', label: 'Withdrawal Speed' },
           ].map((stat) => (
             <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-              <p style={{ fontSize: '48px', fontWeight: '600', color: '#f2f4f3' }}>
+              <p style={{ fontSize: '48px', fontWeight: '600', color: '#2d2a26' }}>
                 <AnimatedCounter target={stat.value} suffix={stat.suffix} prefix={stat.prefix} />
               </p>
               <p style={{ marginTop: '8px', fontSize: '14px', color: '#5e503f', fontWeight: '500' }}>{stat.label}</p>
@@ -620,45 +660,61 @@ export default function LandingPage() {
       <Comparison />
 
       {/* ── TECH STACK ── */}
-      <Section style={{ background: 'rgba(34, 51, 59, 0.2)', borderTop: '1px solid rgba(94, 80, 63, 0.3)', borderBottom: '1px solid rgba(94, 80, 63, 0.3)' }}>
+      <Section style={{ background: 'rgba(169, 146, 125, 0.05)', borderTop: '1px solid rgba(169, 146, 125, 0.2)', borderBottom: '1px solid rgba(169, 146, 125, 0.2)' }}>
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '80px' }}>
-          <span style={{ display: 'inline-block', padding: '6px 16px', borderRadius: '20px', border: '1px solid rgba(94, 80, 63, 0.3)', background: 'rgba(34, 51, 59, 0.6)', fontSize: '13px', fontWeight: '500', color: '#a9927d', marginBottom: '16px' }}>Built With</span>
-          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#f2f4f3', letterSpacing: '-0.02em' }}>Production-grade <span style={{ color: 'rgba(242, 244, 243, 0.6)' }}>tech stack</span></h2>
+          <span style={{ display: 'inline-block', padding: '6px 16px', borderRadius: '20px', border: '1px solid rgba(169, 146, 125, 0.2)', background: 'rgba(169, 146, 125, 0.1)', fontSize: '13px', fontWeight: '500', color: '#a9927d', marginBottom: '16px' }}>Built With</span>
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>Production-grade <Highlighter color="rgba(169, 146, 125, 0.6)"><span style={{ color: 'rgba(45, 42, 38, 0.6)' }}>tech stack</span></Highlighter></h2>
         </motion.div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
-          {[
-            { title: 'AI / RAG', icon: Bot, items: ['LangChain', 'OpenAI Embeddings', 'Pinecone', 'GPT-4 Reviews'] },
-            { title: 'Blockchain', icon: Layers, items: ['Solidity 0.8', 'OpenZeppelin UUPS', 'Hardhat', 'Sepolia / Polygon'] },
-            { title: 'Backend', icon: Github, items: ['Node.js', 'Express', 'PostgreSQL', 'Redis Cache'] },
-            { title: 'Frontend', icon: Sparkles, items: ['React 19', 'Tailwind CSS', 'Framer Motion', 'wagmi / viem'] },
-          ].map((tech, i) => (
-            <motion.div
-              key={tech.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              style={{ padding: '32px', borderRadius: '24px', border: '1px solid rgba(94, 80, 63, 0.2)', background: '#22333b' }}
-            >
-              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(169, 146, 125, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
-                <tech.icon style={{ width: '20px', height: '20px', color: '#a9927d' }} />
-              </div>
-              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '24px', fontWeight: '500', color: '#f2f4f3', marginBottom: '12px' }}>{tech.title}</h3>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {tech.items.map((item) => (
-                  <li key={item} style={{ fontSize: '14px', color: 'rgba(242, 244, 243, 0.7)', marginBottom: '6px' }}>{item}</li>
+        {/* Marquee Container */}
+        <div style={{
+          display: 'flex',
+          overflow: 'hidden',
+          maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
+          padding: '20px 0'
+        }}>
+          <motion.div
+            animate={{ x: "-50%" }}
+            transition={{ repeat: Infinity, ease: "linear", duration: 30 }}
+            style={{ display: 'flex', gap: '80px', padding: '0 40px', minWidth: 'max-content' }}
+          >
+            {[...Array(2)].map((_, i) => (
+              <React.Fragment key={i}>
+                {[
+                  { name: 'Solana', icon: <DollarSign size={32} /> },
+                  { name: 'React', icon: <Brain size={32} /> },
+                  { name: 'Node.js', icon: <Terminal size={32} /> },
+                  { name: 'Arweave', icon: <Database size={32} /> },
+                  { name: 'WakaTime', icon: <GanttChart size={32} /> },
+                  { name: 'Tailwind', icon: <Layers size={32} /> },
+                  { name: 'OpenAI', icon: <Bot size={32} /> },
+                  { name: 'Kleros', icon: <ShieldCheck size={32} /> }
+                ].map((tech, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    fontSize: '28px',
+                    fontWeight: '600',
+                    color: '#a9927d',
+                    opacity: 0.9,
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {tech.icon}
+                    <span style={{ color: '#2d2a26' }}>{tech.name}</span>
+                  </div>
                 ))}
-              </ul>
-            </motion.div>
-          ))}
+              </React.Fragment>
+            ))}
+          </motion.div>
         </div>
       </Section>
 
       {/* ── FAQ ── */}
       <Section id="faq">
         <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '80px' }}>
-          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#f2f4f3', letterSpacing: '-0.02em' }}>Questions? <span style={{ color: 'rgba(242, 244, 243, 0.6)' }}>Answers.</span></h2>
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>Questions? <Highlighter color="rgba(169, 146, 125, 0.3)"><span style={{ color: 'rgba(45, 42, 38, 0.6)' }}>Answers.</span></Highlighter></h2>
         </motion.div>
 
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -675,53 +731,27 @@ export default function LandingPage() {
       </Section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ borderTop: '1px solid rgba(94, 80, 63, 0.3)', padding: '64px 24px', background: '#0a0908' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+      {/* ── FOOTER ── */}
+      <footer style={{ borderTop: '1px solid rgba(169, 146, 125, 0.2)', padding: '32px 24px', background: '#fbf7ef' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '40px' }}>
-              <div style={{ maxWidth: '300px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                  <img src="/logo.png" alt="Senate" style={{ height: '32px', width: 'auto', opacity: 0.9 }} />
-                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: '24px', fontWeight: '600', color: '#f2f4f3' }}>Senate</span>
-                </div>
-                <p style={{ fontSize: '16px', lineHeight: '1.6', color: 'rgba(242, 244, 243, 0.6)' }}>
-                  The first AI-native project management protocol. Fair work, fair pay, on-chain.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', gap: '64px', flexWrap: 'wrap' }}>
-                <div>
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#f2f4f3', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>Features</a>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>How it Works</a>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>Pricing</a>
-                  </div>
-                </div>
-                <div>
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#f2f4f3', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resources</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>Documentation</a>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>GitHub</a>
-                    <a href="#" style={{ color: 'rgba(242, 244, 243, 0.6)', textDecoration: 'none', fontSize: '14px' }}>Whitepaper</a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ height: '1px', background: 'rgba(94, 80, 63, 0.3)', width: '100%' }} />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-              <p style={{ fontSize: '14px', color: '#5e503f', margin: 0 }}>© 2026 Senate Protocol. All rights reserved.</p>
-              <div style={{ display: 'flex', gap: '24px' }}>
-                <Twitter style={{ width: '20px', height: '20px', color: 'rgba(242, 244, 243, 0.6)', cursor: 'pointer' }} />
-                <Github style={{ width: '20px', height: '20px', color: 'rgba(242, 244, 243, 0.6)', cursor: 'pointer' }} />
-                <Disc style={{ width: '20px', height: '20px', color: 'rgba(242, 244, 243, 0.6)', cursor: 'pointer' }} />
-              </div>
-            </div>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/logo.png" alt="Senate" style={{ height: '20px', width: 'auto', opacity: 0.8 }} />
+            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: '16px', fontWeight: '600', color: '#2d2a26' }}>Senate Protocol</span>
+            <span style={{ fontSize: '14px', color: 'rgba(45, 42, 38, 0.4)', marginLeft: '8px' }}>© 2026</span>
           </div>
+
+          <div style={{ display: 'flex', gap: '24px' }}>
+            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Documentation</a>
+            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>GitHub</a>
+            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Contact</a>
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Twitter style={{ width: '18px', height: '18px', color: 'rgba(45, 42, 38, 0.6)', cursor: 'pointer' }} />
+            <Github style={{ width: '18px', height: '18px', color: 'rgba(45, 42, 38, 0.6)', cursor: 'pointer' }} />
+          </div>
+
         </div>
       </footer>
 

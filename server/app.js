@@ -32,19 +32,24 @@ app.use((err, _req, res, _next) => {
 });
 
 if (!MONGO_URI) {
-	console.error("MONGO_URI is not set.");
-	process.exit(1);
-}
-
-mongoose
-	.connect(MONGO_URI)
-	.then(() => {
-		console.log("MongoDB connected.");
-		app.listen(PORT, () => {
-			console.log(`Server listening on ${PORT}`);
-		});
-	})
-	.catch((error) => {
-		console.error("MongoDB connection error:", error);
-		process.exit(1);
+	console.warn("⚠️  MONGO_URI is not set. Running without MongoDB.");
+	app.listen(PORT, () => {
+		console.log(`Server listening on ${PORT} (MongoDB disabled)`);
 	});
+} else {
+	mongoose
+		.connect(MONGO_URI)
+		.then(() => {
+			console.log("MongoDB connected.");
+			app.listen(PORT, () => {
+				console.log(`Server listening on ${PORT}`);
+			});
+		})
+		.catch((error) => {
+			console.error("MongoDB connection error:", error);
+			console.warn("⚠️  Starting server without MongoDB...");
+			app.listen(PORT, () => {
+				console.log(`Server listening on ${PORT} (MongoDB connection failed)`);
+			});
+		});
+}

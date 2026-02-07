@@ -55,19 +55,25 @@ export function useWallet() {
     getCurrentAccount().then(updateAccount);
 
     // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        updateAccount(accounts[0] || null);
-      });
+    const handleAccountsChanged = (accounts: string[]) => {
+      updateAccount(accounts[0] || null);
+    };
 
-      window.ethereum.on('chainChanged', () => {
-        window.location.reload();
-      });
+    const handleChainChanged = (chainIdHex: string) => {
+      // Update chain ID without reloading
+      const newChainId = parseInt(chainIdHex, 16);
+      setChainId(newChainId);
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
     }
 
     return () => {
       if (window.ethereum) {
-        window.ethereum.removeListener('accountsChanged', updateAccount);
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
       }
     };
   }, [updateAccount]);
