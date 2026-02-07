@@ -14,6 +14,8 @@ const UserSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    role: { type: String, enum: ["admin", "developer"], default: "developer" },
+    passwordHash: { type: String, default: null },
     avatarUrl: { type: String, trim: true },
     provider: { type: String, trim: true },
     githubId: { type: String, trim: true },
@@ -21,6 +23,7 @@ const UserSchema = new mongoose.Schema(
     wakatimeTokens: { type: TokenSchema, default: () => ({}) },
     githubTokens: { type: TokenSchema, default: () => ({}) },
     resume: {type: String, default: null},
+    walletAddress: {type: String , default: null}
   },
   { timestamps: true }
 );

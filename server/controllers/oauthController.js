@@ -8,7 +8,9 @@ const GITHUB_USER_URL = "https://api.github.com/user";
 const GITHUB_EMAILS_URL = "https://api.github.com/user/emails";
 const User = require("../models/UserSchema");
 const MANUAL_EMAIL_COOKIE = "manual_email";
+const ROLE_COOKIE = "manual_role";
 const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
+const WAKATIME_REDIRECT_COOKIE = "wakatime_redirect";
 
 const buildRedirectUri = (req) =>
 	process.env.WAKATIME_REDIRECT_URI ||
@@ -44,7 +46,7 @@ const parseCookies = (req) => {
 
 async function HandleWakaTimeOAuth(req, res) {
 	console.log("Backend starting wakatime oauth");
-	const { code, error, error_description: errorDescription } = req.query;
+	const { code, error, error_description: errorDescription, redirectTo } = req.query;
 	const clientId = process.env.WAKATIME_APP_ID;
 	const clientSecret = process.env.WAKATIME_APP_SECRET;
 
@@ -64,6 +66,14 @@ async function HandleWakaTimeOAuth(req, res) {
 	const scope = process.env.WAKATIME_SCOPES || "read_stats";
 
 	if (!code) {
+		if (redirectTo) {
+			res.cookie(WAKATIME_REDIRECT_COOKIE, redirectTo, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 15 * 60 * 1000,
+			});
+		}
 		console.log("No code received, redirecting to WakaTime authorize URL");
 		const params = new URLSearchParams({
 			client_id: clientId,
@@ -166,7 +176,14 @@ async function HandleWakaTimeOAuth(req, res) {
 			maxAge: 7 * 24 * 60 * 60 * 1000,
 		});
 
-		return res.redirect(buildClientRedirectUrl({ oauth: "success", provider: "wakatime" }));
+		const cookies = parseCookies(req);
+		const redirectPath = cookies[WAKATIME_REDIRECT_COOKIE] === "register" ? "/register" : "/login";
+		res.clearCookie(WAKATIME_REDIRECT_COOKIE, {
+			httpOnly: true,
+			sameSite: "lax",
+			secure: process.env.NODE_ENV === "production",
+		});
+		return res.redirect(buildClientRedirectUrl({ oauth: "success", provider: "wakatime" }, redirectPath));
 	} catch (err) {
 		console.error("WakaTime token request failed", {
 			message: err.message,
@@ -179,7 +196,7 @@ async function HandleWakaTimeOAuth(req, res) {
 
 async function HandleGithubOAuth(req, res) {
 	console.log("Backend starting github oauth");
-	const { code, error, error_description: errorDescription } = req.query;
+	const { code, error, error_description: errorDescription, manualEmail, role } = req.query;
 	const clientId = process.env.GITHUB_CLIENT_ID;
 	const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
@@ -197,6 +214,22 @@ async function HandleGithubOAuth(req, res) {
 	const scope = process.env.GITHUB_SCOPES || "read:user user:email";
 
 	if (!code) {
+		if (manualEmail) {
+			res.cookie(MANUAL_EMAIL_COOKIE, manualEmail.trim().toLowerCase(), {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 15 * 60 * 1000,
+			});
+		}
+		if (role === "admin" || role === "developer") {
+			res.cookie(ROLE_COOKIE, role, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 15 * 60 * 1000,
+			});
+		}
 		const params = new URLSearchParams({
 			client_id: clientId,
 			redirect_uri: redirectUri,
@@ -264,18 +297,25 @@ async function HandleGithubOAuth(req, res) {
 			}
 		}
 
-		if (!email) {
-			return res.status(400).json({ error: "github_email_missing" });
-		}
-
 		const githubId = userData.id ? String(userData.id) : null;
 		if (!githubId) {
 			return res.status(502).json({ error: "github_user_missing", details: userData });
 		}
 
-		const user = await User.findOne({ $or: [{ githubId }, { email }] });
+		const cookies = parseCookies(req);
+		const manualEmailFromCookie = cookies[MANUAL_EMAIL_COOKIE];
+		const roleFromCookie = cookies[ROLE_COOKIE];
+		const lookupEmail = manualEmailFromCookie || email;
+
+		const userQuery = lookupEmail
+			? { $or: [{ githubId }, { email: lookupEmail }] }
+			: { githubId };
+
+		const user = await User.findOne(userQuery);
 		if (!user) {
-			return res.redirect(buildClientRedirectUrl({ oauth: "error", provider: "github" }, "/register"));
+			return res.redirect(
+				buildClientRedirectUrl({ oauth: "error", provider: "github", reason: "github_email_missing" }, "/register")
+			);
 		}
 
 		user.githubId = githubId;
@@ -286,7 +326,26 @@ async function HandleGithubOAuth(req, res) {
 			scope: tokenData.scope || null,
 		};
 
+		if (roleFromCookie === "admin" || roleFromCookie === "developer") {
+			user.role = roleFromCookie;
+		}
+
 		await user.save();
+
+		if (manualEmailFromCookie) {
+			res.clearCookie(MANUAL_EMAIL_COOKIE, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+			});
+		}
+		if (roleFromCookie) {
+			res.clearCookie(ROLE_COOKIE, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+			});
+		}
 
 		res.cookie("session_user", user._id.toString(), {
 			httpOnly: true,
@@ -325,10 +384,20 @@ async function getSessionUser(req, res) {
 			email: user.email,
 			avatarUrl: user.avatarUrl || null,
 			provider: user.provider || "wakatime",
+			role: user.role || "developer",
 			githubConnected: Boolean(user.githubTokens?.accessToken || user.githubId),
 			wakatimeConnected: Boolean(user.wakatimeTokens?.accessToken),
 		},
 	});
 }
 
-module.exports = { HandleWakaTimeOAuth, HandleGithubOAuth, getSessionUser };
+function logoutUser(req, res) {
+	res.clearCookie("session_user", {
+		httpOnly: true,
+		sameSite: "lax",
+		secure: process.env.NODE_ENV === "production",
+	});
+	return res.status(200).json({ ok: true });
+}
+
+module.exports = { HandleWakaTimeOAuth, HandleGithubOAuth, getSessionUser, logoutUser };
