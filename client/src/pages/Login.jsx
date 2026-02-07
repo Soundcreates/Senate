@@ -2,10 +2,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
-import { Clock, ArrowRight, Layers } from 'lucide-react';
-import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
+import { Layers } from 'lucide-react';
+import { fetchWakatimeSession } from '@/Apis/wakatime-authApi';
 import { useAuth } from '../context/AuthContext';
 import { loginAdmin } from '@/Apis/admin-authApi';
+import { loginDeveloper } from '@/Apis/authApi';
 
 
 const Login = () => {
@@ -16,6 +17,10 @@ const Login = () => {
     const [adminPassword, setAdminPassword] = useState('');
     const [adminError, setAdminError] = useState('');
     const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+    const [developerEmail, setDeveloperEmail] = useState('');
+    const [developerPassword, setDeveloperPassword] = useState('');
+    const [developerError, setDeveloperError] = useState('');
+    const [isSubmittingDeveloper, setIsSubmittingDeveloper] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser, setToken } = useAuth();
@@ -59,10 +64,26 @@ const Login = () => {
       hydrateFromSession();
     }, [location.pathname, location.search, navigate, setUser]);
 
-    const handleWakatimeLogin = () => {
-      console.log("Starting wakatime login");
-      startWakatimeOAuth("login");
-    }
+    const handleDeveloperLogin = async () => {
+      if (isSubmittingDeveloper) return;
+      const trimmedEmail = developerEmail.trim().toLowerCase();
+      if (!trimmedEmail || !developerPassword) {
+        setDeveloperError('Email and password are required.');
+        return;
+      }
+
+      setDeveloperError('');
+      setIsSubmittingDeveloper(true);
+      const result = await loginDeveloper({ email: trimmedEmail, password: developerPassword });
+      if (!result.ok) {
+        setDeveloperError('Invalid credentials.');
+        setIsSubmittingDeveloper(false);
+        return;
+      }
+
+      setUser(result.user);
+      navigate('/dashboard');
+    };
 
     const handleAdminLogin = async () => {
       if (isSubmittingAdmin) return;
@@ -139,22 +160,32 @@ const Login = () => {
 
             {roleChoice === 'developer' && (
               <div className="space-y-4">
-                  <button 
-                    onClick={handleWakatimeLogin}
-                    className="w-full bg-[#2c2c2c] hover:bg-[#383838] text-white py-4 rounded-2xl font-bold border border-zinc-700 transition-all flex items-center justify-between px-6 group"
-                  >
-                       <div className="flex items-center gap-4">
-                      <Clock className="text-blue-400" size={24} />
-                          <div className="text-left">
-                        <span className="block text-sm font-medium">Continue with WakaTime</span>
-                        <span className="block text-xs text-zinc-500">Secure OAuth Login</span>
-                          </div>
-                      </div>
-                       <ArrowRight className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" size={20}/>
-                  </button>
-                  <p className="text-xs text-center text-zinc-500">
-                    We use WakaTime to sign you in with your email.
-                  </p>
+                <label className="block text-sm text-zinc-400 text-left">Email</label>
+                <input
+                  type="email"
+                  value={developerEmail}
+                  onChange={(event) => setDeveloperEmail(event.target.value)}
+                  className="w-full rounded-2xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-transparent"
+                  placeholder="you@example.com"
+                />
+                <label className="block text-sm text-zinc-400 text-left">Password</label>
+                <input
+                  type="password"
+                  value={developerPassword}
+                  onChange={(event) => setDeveloperPassword(event.target.value)}
+                  className="w-full rounded-2xl bg-zinc-800 border border-zinc-700 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-transparent"
+                  placeholder="••••••••"
+                />
+                {developerError && (
+                  <p className="text-xs text-red-400 text-left">{developerError}</p>
+                )}
+                <button
+                  onClick={handleDeveloperLogin}
+                  disabled={isSubmittingDeveloper}
+                  className="w-full bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-2xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingDeveloper ? 'Signing in...' : 'Sign in'}
+                </button>
               </div>
             )}
 

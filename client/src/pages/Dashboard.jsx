@@ -1,33 +1,66 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { MoreHorizontal, Plus, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import AdminDashboard from './AdminDashboard';
 import { useNavigate } from 'react-router-dom';
+import { fetchWakatimeStats } from '@/Apis/statApis';
+import { fetchActivityHistory, fetchTodayActivity, listProjectTasks, listProjects } from '@/Apis/projectApis';
 
-const TASKS = [
-  { id: 1, title: 'Implement Authentication', status: 'In Progress', priority: 'High', assignee: 'Sarah Chen' },
-  { id: 2, title: 'Database Schema Design', status: 'Done', priority: 'High', assignee: 'Michael Ross' },
-  { id: 3, title: 'API Documentation', status: 'To Do', priority: 'Medium', assignee: 'David Kim' },
-  { id: 4, title: 'Frontend Setup', status: 'Done', priority: 'High', assignee: 'Sarah Chen' },
-  { id: 5, title: 'Unit Tests', status: 'In Progress', priority: 'Low', assignee: 'Emily Davis' },
+const STATUS_COLUMNS = [
+  { key: 'todo', label: 'To Do' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'done', label: 'Done' },
 ];
 
-const PRODUCTIVITY_DATA = [
-  { name: 'Mon', completed: 4, efficiency: 85 },
-  { name: 'Tue', completed: 6, efficiency: 88 },
-  { name: 'Wed', completed: 8, efficiency: 92 },
-  { name: 'Thu', completed: 5, efficiency: 87 },
-  { name: 'Fri', completed: 9, efficiency: 95 },
-  { name: 'Sat', completed: 2, efficiency: 80 },
-  { name: 'Sun', completed: 1, efficiency: 75 },
-];
+const formatDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const buildWeekRange = () => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 6);
+  const toIso = (date) => date.toISOString().slice(0, 10);
+  return { start: toIso(start), end: toIso(end) };
+};
+
+const parseWakaTimeSeries = (payload) => {
+  const data = payload?.data?.data || [];
+  if (!Array.isArray(data)) return [];
+
+  return data.map((entry) => {
+    const dateValue = entry?.range?.date || entry?.range?.start || entry?.range?.start_date || entry?.range?.start_date_time;
+    const dayLabel = dateValue
+      ? new Date(dateValue).toLocaleDateString('en-US', { weekday: 'short' })
+      : '—';
+    const seconds = entry?.grand_total?.total_seconds || 0;
+    const hours = Math.round((seconds / 3600) * 10) / 10;
+    const efficiency = Math.min(100, Math.round((hours / 8) * 100));
+    return {
+      name: dayLabel,
+      completed: hours,
+      efficiency,
+      rawDate: dateValue || null,
+    };
+  });
+};
 const Dashboard = () => {
   const containerRef = useRef(null);
   const { fetchUserProfile, user, logout } = useAuth();
   const navigate = useNavigate();
+  const [projects, setProjects] = useState([]);
+  const [activeProject, setActiveProject] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [wakatimeSeries, setWakatimeSeries] = useState([]);
+  const [todayCommits, setTodayCommits] = useState(0);
+  const [todayHours, setTodayHours] = useState(0);
+  const [historySeries, setHistorySeries] = useState([]);
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.dashboard-header', {
@@ -64,7 +97,42 @@ const Dashboard = () => {
       });
     }, containerRef);
     const fetchData = async () => {
-      await fetchUserProfile();
+      const session = await fetchUserProfile();
+      if (session?.user?.role === 'admin') return;
+
+      const { start, end } = buildWeekRange();
+      const wakaResult = await fetchWakatimeStats({ start, end });
+      if (wakaResult.ok) {
+        const series = parseWakaTimeSeries(wakaResult.data);
+        setWakatimeSeries(series);
+        const latest = series[series.length - 1];
+        setTodayHours(latest?.completed || 0);
+      }
+
+      const projectResult = await listProjects();
+      if (projectResult.ok) {
+        setProjects(projectResult.projects);
+        const primaryProject = projectResult.projects[0] || null;
+        setActiveProject(primaryProject);
+
+        if (primaryProject) {
+          const [todayResult, historyResult, taskResult] = await Promise.all([
+            fetchTodayActivity(primaryProject._id),
+            fetchActivityHistory(primaryProject._id),
+            listProjectTasks(primaryProject._id),
+          ]);
+
+          if (todayResult.ok) {
+            setTodayCommits(todayResult.data?.commitsToday || 0);
+          }
+          if (historyResult.ok) {
+            setHistorySeries(historyResult.data?.history || []);
+          }
+          if (taskResult.ok) {
+            setTasks(taskResult.tasks);
+          }
+        }
+      }
     };
     fetchData();
 
@@ -81,7 +149,7 @@ const Dashboard = () => {
         { label: 'Resume URL', value: user.resume || '—' },
       ]
     : [];
-    if(user.role === "admin"){
+     if (user?.role === "admin") {
        return <AdminDashboard />
     }
 
@@ -89,6 +157,23 @@ const Dashboard = () => {
       await logout();
       navigate('/login');
     }
+
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter((task) => task.status === 'done').length;
+  const inProgressTasks = tasks.filter((task) => task.status === 'in_progress').length;
+  const productivityData = wakatimeSeries.length
+    ? wakatimeSeries
+    : [{ name: '—', completed: 0, efficiency: 0 }];
+  const activityData = historySeries
+    .slice()
+    .reverse()
+    .map((entry) => ({
+      name: formatDate(entry.date),
+      commits: entry.commitCount || 0,
+    }));
+  const commitSeries = activityData.length
+    ? activityData
+    : [{ name: '—', commits: 0 }];
   return (
     <div ref={containerRef} className="p-8 min-h-screen bg-zinc-950 text-white ml-64 overflow-hidden">
       <div className="dashboard-header flex justify-between items-end mb-8">
@@ -152,10 +237,10 @@ const Dashboard = () => {
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {[
-          { label: 'Total Tasks', value: '24', change: '+12%', color: 'from-blue-500 to-cyan-500' },
-          { label: 'Completed', value: '18', change: '+8%', color: 'from-green-500 to-emerald-500' },
-          { label: 'In Progress', value: '4', change: '-2%', color: 'from-orange-500 to-amber-500' },
-          { label: 'Efficiency', value: '92%', change: '+5%', color: 'from-purple-500 to-pink-500' },
+          { label: 'Total Tasks', value: String(totalTasks), change: activeProject ? activeProject.name : 'No project yet', color: 'from-blue-500 to-cyan-500' },
+          { label: 'Completed', value: String(completedTasks), change: 'Live data', color: 'from-green-500 to-emerald-500' },
+          { label: 'In Progress', value: String(inProgressTasks), change: 'Live data', color: 'from-orange-500 to-amber-500' },
+          { label: 'Today Commits', value: String(todayCommits), change: `${todayHours}h focus`, color: 'from-purple-500 to-pink-500' },
         ].map((stat, i) => (
           <div key={i} className="stat-card bg-zinc-900/50 backdrop-blur-md border border-zinc-800 p-6 rounded-2xl shadow-xl relative overflow-hidden group">
             <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${stat.color} opacity-10 rounded-bl-full group-hover:opacity-20 transition-opacity`} />
@@ -174,7 +259,7 @@ const Dashboard = () => {
           <h3 className="text-lg font-semibold mb-6">Team Productivity</h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={PRODUCTIVITY_DATA}>
+              <AreaChart data={productivityData}>
                 <defs>
                   <linearGradient id="colorIso" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
@@ -194,21 +279,20 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Efficiency Chart */}
+        {/* Commit Activity */}
          <div className="chart-container bg-zinc-900/50 backdrop-blur-md border border-zinc-800 p-6 rounded-3xl shadow-xl">
-          <h3 className="text-lg font-semibold mb-6">Code Efficiency Trends</h3>
+          <h3 className="text-lg font-semibold mb-6">Commit Activity</h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={PRODUCTIVITY_DATA}>
+              <LineChart data={commitSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="name" stroke="#71717a" tick={{fill: '#71717a'}} axisLine={false} tickLine={false} />
                 <YAxis stroke="#71717a" tick={{fill: '#71717a'}} axisLine={false} tickLine={false} />
                 <Tooltip 
                     contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '12px', color: '#fff' }}
-                    cursor={{fill: '#27272a'}}
                 />
-                <Bar dataKey="efficiency" fill="#10b981" radius={[6, 6, 0, 0]} barSize={40} />
-              </BarChart>
+                <Line type="monotone" dataKey="commits" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -216,38 +300,39 @@ const Dashboard = () => {
 
       {/* Task Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {['To Do', 'In Progress', 'Done'].map((status) => (
-          <div key={status} className="task-column bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-4">
+        {STATUS_COLUMNS.map((column) => (
+          <div key={column.key} className="task-column bg-zinc-900/30 border border-zinc-800/50 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-zinc-300">{status}</h3>
+              <h3 className="font-semibold text-zinc-300">{column.label}</h3>
               <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-1 rounded-full">
-                {TASKS.filter(t => t.status === status).length}
+                {tasks.filter((task) => task.status === column.key).length}
               </span>
             </div>
             <div className="space-y-3">
-              {TASKS.filter(t => t.status === status).map(task => (
-                <div key={task.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl hover:border-zinc-700 transition-colors cursor-move group">
+              {tasks.filter((task) => task.status === column.key).map((task) => (
+                <div key={task._id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl hover:border-zinc-700 transition-colors cursor-move group">
                   <div className="flex justify-between items-start mb-2">
-                    <span className={`text-[10px] px-2 py-1 rounded-md mb-2 inline-block font-medium ${
-                      task.priority === 'High' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                      task.priority === 'Medium' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 
-                      'bg-green-500/10 text-green-400 border border-green-500/20'
-                    }`}>
-                      {task.priority}
+                    <span className="text-[10px] px-2 py-1 rounded-md mb-2 inline-block font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      {column.label}
                     </span>
                     <button className="text-zinc-600 hover:text-white transition-colors">
                       <MoreHorizontal size={16} />
                     </button>
                   </div>
-                  <h4 className="font-medium text-white mb-3 group-hover:text-indigo-400 transition-colors">{task.title}</h4>
+                  <h4 className="font-medium text-white mb-1 group-hover:text-indigo-400 transition-colors">{task.title}</h4>
+                  {task.description && (
+                    <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{task.description}</p>
+                  )}
                   <div className="flex items-center justify-between text-xs text-zinc-500">
                     <div className="flex items-center gap-2">
                          <div className="w-5 h-5 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] text-indigo-400 border border-indigo-500/30">
-                            {task.assignee.charAt(0)}
+                            {(task.assignees?.[0] || 'U').charAt(0).toUpperCase()}
                          </div>
-                         <span>{task.assignee}</span>
+                         <span>{task.assignees?.[0] || 'Unassigned'}</span>
                     </div>
-                    <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] border border-zinc-700">Dec 24</span>
+                    <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] border border-zinc-700">
+                      {formatDate(task.createdAt) || '—'}
+                    </span>
                   </div>
                 </div>
               ))}

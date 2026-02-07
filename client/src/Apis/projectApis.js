@@ -17,6 +17,22 @@ export const createProject = async (name) => {
   return { ok: true, project: data.project };
 };
 
+export const listProjects = async () => {
+  const response = await fetch(`${BASE_API}/api/projects`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, error: data.error || "project_list_failed" };
+  }
+
+  const data = await response.json();
+  return { ok: true, projects: data.projects || [] };
+};
+
 export const createTask = async (projectId, payload) => {
   const response = await fetch(`${BASE_API}/api/tasks/${projectId}/tasks`, {
     method: "POST",
@@ -32,6 +48,22 @@ export const createTask = async (projectId, payload) => {
 
   const data = await response.json();
   return { ok: true, task: data.task };
+};
+
+export const listProjectTasks = async (projectId) => {
+  const response = await fetch(`${BASE_API}/api/tasks/${projectId}/tasks`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, error: data.error || "task_list_failed" };
+  }
+
+  const data = await response.json();
+  return { ok: true, tasks: data.tasks || [] };
 };
 
 export const assignTaskMembers = async (projectId, taskId, assignees) => {

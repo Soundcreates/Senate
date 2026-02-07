@@ -44,4 +44,51 @@ const getTodayCommits = async (project, username, token) => {
   return Array.isArray(data) ? data.map(mapCommit) : [];
 };
 
-module.exports = { getTodayCommits };
+const mapRecentCommit = (event, commit) => {
+  const ref = event.payload?.ref || "";
+  const branch = ref.startsWith("refs/heads/") ? ref.replace("refs/heads/", "") : ref || "main";
+  return {
+    commitSha: commit.sha || commit.commitSha || null,
+    message: commit.message || "",
+    repo: event.repo?.name || null,
+    branch,
+    timestamp: event.created_at ? new Date(event.created_at) : null,
+  };
+};
+
+const getRecentCommits = async (token, { limit = 20 } = {}) => {
+  const url = "https://api.github.com/user/events?per_page=100";
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Datathon-2026",
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_recent_commits_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  const commits = [];
+  if (Array.isArray(data)) {
+    data.forEach((event) => {
+      if (event.type !== "PushEvent") return;
+      const eventCommits = Array.isArray(event.payload?.commits) ? event.payload.commits : [];
+      eventCommits.forEach((commit) => {
+        if (commits.length < limit) {
+          commits.push(mapRecentCommit(event, commit));
+        }
+      });
+    });
+  }
+
+  return commits;
+};
+
+module.exports = { getTodayCommits, getRecentCommits };

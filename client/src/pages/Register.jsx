@@ -7,6 +7,7 @@ import { startGithubLogin } from '@/Apis/github-authApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
 import { uploadResume } from '@/Apis/resumeApi';
 import { registerAdmin } from '@/Apis/admin-authApi';
+import { registerDeveloper } from '@/Apis/authApi';
 
 const Register = () => {
     const containerRef = useRef(null);
@@ -14,7 +15,11 @@ const Register = () => {
     const [step, setStep] = useState(1);
     const [roleChoice, setRoleChoice] = useState(null);
     const [manualEmail, setManualEmail] = useState('');
-    const [manualEmailError, setManualEmailError] = useState('');
+    const [developerEmail, setDeveloperEmail] = useState('');
+    const [developerPassword, setDeveloperPassword] = useState('');
+    const [developerPasswordConfirm, setDeveloperPasswordConfirm] = useState('');
+    const [developerError, setDeveloperError] = useState('');
+    const [isSubmittingDeveloper, setIsSubmittingDeveloper] = useState(false);
     const [role, setRole] = useState('developer');
     const [adminEmail, setAdminEmail] = useState('');
     const [adminPassword, setAdminPassword] = useState('');
@@ -96,19 +101,35 @@ const Register = () => {
         navigate('/dashboard');
     };
 
-    const handleManualEmailContinue = () => {
-        const trimmedEmail = manualEmail.trim().toLowerCase();
-        if (!trimmedEmail) {
-            setManualEmailError('Please enter your email.');
+    const handleDeveloperRegister = async () => {
+        if (isSubmittingDeveloper) return;
+        const trimmedEmail = developerEmail.trim().toLowerCase();
+        if (!trimmedEmail || !developerPassword) {
+            setDeveloperError('Email and password are required.');
             return;
         }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(trimmedEmail)) {
-            setManualEmailError('Please enter a valid email address.');
+        if (developerPassword !== developerPasswordConfirm) {
+            setDeveloperError('Passwords do not match.');
             return;
         }
-        setManualEmailError('');
-        setStep(3);
+
+        setDeveloperError('');
+        setIsSubmittingDeveloper(true);
+        const result = await registerDeveloper({ email: trimmedEmail, password: developerPassword, name: trimmedEmail });
+        if (!result.ok) {
+            setDeveloperError(result.error === 'email_in_use' ? 'Email already in use.' : 'Registration failed.');
+            setIsSubmittingDeveloper(false);
+            return;
+        }
+
+        setUser(result.user);
+        setManualEmail(trimmedEmail);
+        try {
+            localStorage.setItem('register.email', trimmedEmail);
+        } catch (_error) {
+            // ignore storage failures
+        }
+        setStep(2);
     };
 
     const handleResumeUpload = (event) => {
@@ -151,12 +172,25 @@ const Register = () => {
                 setUser(result.user);
                 setRoleChoice('developer');
                 setRole('developer');
+                try {
+                    const storedEmail = localStorage.getItem('register.email');
+                    if (storedEmail) {
+                        setManualEmail(storedEmail);
+                    }
+                } catch (_error) {
+                    // ignore storage failures
+                }
                 setWakatimeConnected(Boolean(result.user.wakatimeConnected));
                 setGithubConnected(Boolean(result.user.githubConnected));
                 if (provider === 'wakatime') {
-                    setStep(2);
+                    setStep(3);
                 }
                 if (provider === 'github') {
+                    try {
+                        localStorage.removeItem('register.email');
+                    } catch (_error) {
+                        // ignore storage failures
+                    }
                     setStep(4);
                 }
                 // Clean up URL
@@ -190,7 +224,7 @@ const Register = () => {
                 {roleChoice === 'admin'
                     ? 'Create an admin account'
                     : roleChoice === 'developer'
-                        ? `Step ${step} of 4: ${step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
+                        ? `Step ${step} of 4: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : 'Upload Resume'}`
                         : 'Choose your role to begin'}
             </p>
           </div>
@@ -280,48 +314,61 @@ const Register = () => {
             {/* Step 1: WakaTime */}
             {roleChoice === 'developer' && step === 1 && (
                 <div className="space-y-5">
-                    <button 
-                        onClick={handleWakatimeConnect}
-                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
-                    >
-                        <div className="text-lg font-semibold mb-1">Connect WakaTime</div>
-                        <div className="text-sm text-zinc-300">Track your coding statistics</div>
-                    </button>
-                    <p className="text-sm text-center text-zinc-400 leading-relaxed">
-                        This allows us to generate your productivity analytics automatically.
-                    </p>
+                    <div className="space-y-4">
+                        <label className="block text-sm text-zinc-400 text-left">Email</label>
+                        <input
+                            type="email"
+                            value={developerEmail}
+                            onChange={(event) => setDeveloperEmail(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="you@example.com"
+                        />
+                        <label className="block text-sm text-zinc-400 text-left">Password</label>
+                        <input
+                            type="password"
+                            value={developerPassword}
+                            onChange={(event) => setDeveloperPassword(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
+                        <label className="block text-sm text-zinc-400 text-left">Confirm password</label>
+                        <input
+                            type="password"
+                            value={developerPasswordConfirm}
+                            onChange={(event) => setDeveloperPasswordConfirm(event.target.value)}
+                            className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                            placeholder="••••••••"
+                        />
+                        {developerError && (
+                            <p className="text-sm text-red-400 text-left">{developerError}</p>
+                        )}
+                        <button
+                            onClick={handleDeveloperRegister}
+                            disabled={isSubmittingDeveloper}
+                            className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isSubmittingDeveloper ? 'Creating account...' : 'Continue to WakaTime'}
+                        </button>
+                    </div>
                 </div>
             )}
 
                 {/* Step 2: Email */}
-              {roleChoice === 'developer' && step === 2 && (
+                {roleChoice === 'developer' && step === 2 && (
                  <div className="space-y-5">
-                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                        <span className="text-sm text-zinc-300">✓ WakaTime Connected</span>
-                     </div>
-
-                     <div className="space-y-4">
-                         <label className="block text-sm text-zinc-400 text-left">
-                             Enter your email address
-                         </label>
-                         <input
-                             type="email"
-                             value={manualEmail}
-                             onChange={(event) => setManualEmail(event.target.value)}
-                             onKeyDown={(e) => e.key === 'Enter' && handleManualEmailContinue()}
-                             className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
-                             placeholder="you@example.com"
-                         />
-                         {manualEmailError && (
-                             <p className="text-sm text-red-400 text-left">{manualEmailError}</p>
-                         )}
-                         <button
-                             onClick={handleManualEmailContinue}
-                             className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all"
-                         >
-                             Continue to GitHub
-                         </button>
-                     </div>
+                            <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                                <span className="text-sm text-zinc-300">✓ Account Created</span>
+                            </div>
+                     <button 
+                        onClick={handleWakatimeConnect}
+                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
+                      >
+                        <div className="text-lg font-semibold mb-1">Connect WakaTime</div>
+                        <div className="text-sm text-zinc-300">Track your coding statistics</div>
+                      </button>
+                                            <p className="text-sm text-center text-zinc-400 leading-relaxed">
+                                                This allows us to generate your productivity analytics automatically.
+                                            </p>
                 </div>
             )}
 
@@ -329,7 +376,7 @@ const Register = () => {
             {roleChoice === 'developer' && step === 3 && (
                 <div className="space-y-5">
                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
-                        <span className="text-sm text-zinc-300">✓ Email Confirmed</span>
+                        <span className="text-sm text-zinc-300">✓ WakaTime Connected</span>
                     </div>
 
                     <button 
