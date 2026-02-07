@@ -95,11 +95,10 @@ print("Database:", os.getenv("CHROMA_DATABASE"))
 print("API Key present:", bool(os.getenv("CHROMA_API_KEY")))
 
 chroma_client = chromadb.CloudClient(
-  api_key='ck-67rfSM5s9qDEdmkLR4SXZoXjEpDa2paFXtuzRcSUzJis',
-  tenant='f22027e1-86e5-4294-bd9b-a536edc1ef9a',
-  database='Datathon-26'
+  api_key=os.getenv("CHROMA_API_KEY"),
+    tenant=os.getenv("CHROMA_TENANT"),
+    database=os.getenv("CHROMA_DATABASE")
 )
-
 
 collection = chroma_client.get_or_create_collection(
     name="resume_embeddings"
