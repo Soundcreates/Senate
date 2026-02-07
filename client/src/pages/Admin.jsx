@@ -99,13 +99,25 @@ Project: "${prompt}". Return ONLY JSON.`
           let people = [];
 
           if (Array.isArray(ragData)) {
+            // Direct array of people
             people = ragData;
+          } else if (ragData.name && ragData.userid) {
+            // Single person object - wrap in array
+            people = [ragData];
+            console.log('[Admin] Received single person object, converted to array');
           } else if (ragData.recommendations && Array.isArray(ragData.recommendations)) {
             people = ragData.recommendations;
           } else if (ragData.team && Array.isArray(ragData.team)) {
             people = ragData.team;
           } else if (ragData.people && Array.isArray(ragData.people)) {
             people = ragData.people;
+          } else if (ragData.data) {
+            // Check if data property contains recommendations
+            if (Array.isArray(ragData.data)) {
+              people = ragData.data;
+            } else if (ragData.data.name && ragData.data.userid) {
+              people = [ragData.data];
+            }
           }
 
           // Format people to match expected structure
