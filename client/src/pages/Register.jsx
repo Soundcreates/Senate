@@ -12,6 +12,7 @@ import { submitToVectorDB } from '@/Apis/vectorDbApi';
 
 const Register = () => {
     const containerRef = useRef(null);
+    const resumeInputRef = useRef(null);
     const oauthProcessedRef = useRef(false);
     const [step, setStep] = useState(1);
     const [roleChoice, setRoleChoice] = useState(null);
@@ -142,6 +143,19 @@ const Register = () => {
         const file = event.target.files?.[0];
         setResumeFile(file || null);
         setResumeError('');
+    };
+
+    const handleResumeDragOver = (event) => {
+        event.preventDefault();
+    };
+
+    const handleResumeDrop = (event) => {
+        event.preventDefault();
+        const file = event.dataTransfer?.files?.[0];
+        if (file) {
+            setResumeFile(file);
+            setResumeError('');
+        }
     };
 
     const handleProfileContinue = () => {
@@ -510,13 +524,27 @@ const Register = () => {
                             <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
                                 <span className="text-sm text-[#a9927d]">✓ Profile Complete</span>
                             </div>
-                            <div className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors">
+                            <div
+                                className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors cursor-pointer"
+                                onClick={() => resumeInputRef.current?.click()}
+                                onDragOver={handleResumeDragOver}
+                                onDrop={handleResumeDrop}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        resumeInputRef.current?.click();
+                                    }
+                                }}
+                            >
                                 <input
                                     type="file"
                                     className="hidden"
                                     id="resume-upload"
                                     onChange={handleResumeUpload}
                                     accept="application/pdf"
+                                    ref={resumeInputRef}
                                 />
                                 <label htmlFor="resume-upload" className="cursor-pointer text-[#5e503f] font-['Jost']">
                                     {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
