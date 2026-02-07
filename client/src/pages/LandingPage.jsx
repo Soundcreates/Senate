@@ -160,10 +160,10 @@ function Navigation() {
         padding: '8px 24px',
         maxWidth: 'fit-content',
         transition: 'all 0.3s ease',
-        boxShadow: scrolled ? '0 10px 40px rgba(0,0,0,0.4)' : 'none',
+        boxShadow: scrolled ? '0 4px 20px rgba(0,0,0,0.08)' : 'none',
         borderRadius: '9999px',
-        background: scrolled ? 'rgba(28, 28, 28, 0.9)' : 'rgba(28, 28, 28, 0.7)',
-        border: scrolled ? '1px solid rgba(94, 80, 63, 0.3)' : '1px solid rgba(94, 80, 63, 0.1)',
+        background: scrolled ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.7)',
+        border: scrolled ? '1px solid rgba(169, 146, 125, 0.2)' : '1px solid rgba(169, 146, 125, 0.1)',
         backdropFilter: 'blur(12px)'
       }}>
         {/* Logo */}
