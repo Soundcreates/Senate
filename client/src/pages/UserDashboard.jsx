@@ -86,6 +86,7 @@ const UserDashboard = () => {
     const [projects, setProjects] = useState([]);
     const [projectTasks, setProjectTasks] = useState({});
     const [recentCommits, setRecentCommits] = useState([]);
+    const [recentCommitsLoading, setRecentCommitsLoading] = useState(false);
     const [wakatimeLoading, setWakatimeLoading] = useState(false);
 
     const handleLogout = async () => {
@@ -127,9 +128,13 @@ const UserDashboard = () => {
 
             }
 
-            const recentResult = await fetchRecentCommits(20);
+            setRecentCommitsLoading(true);
+            const recentResult = await fetchRecentCommits(5);
             if (isMounted && recentResult.ok) {
                 setRecentCommits(recentResult.commits || []);
+            }
+            if (isMounted) {
+                setRecentCommitsLoading(false);
             }
         };
 
@@ -413,12 +418,26 @@ const UserDashboard = () => {
                             <GitCommit size={18} style={{ color: '#a9927d' }} />
                         </div>
                         <div style={{ padding: '8px 0' }}>
-                            {recentCommits.length === 0 && (
+                            {recentCommitsLoading ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 20px', color: '#a9927d', fontSize: '13px' }}>
+                                    <span
+                                        style={{
+                                            width: '18px',
+                                            height: '18px',
+                                            borderRadius: '50%',
+                                            border: '2px solid rgba(169, 146, 125, 0.4)',
+                                            borderTopColor: '#a9927d',
+                                            animation: 'spin 1s linear infinite',
+                                            display: 'inline-block'
+                                        }}
+                                    />
+                                    Loading recent commits...
+                                </div>
+                            ) : recentCommits.length === 0 ? (
                                 <div style={{ padding: '16px 20px', fontSize: '13px', color: '#a9927d' }}>
                                     No commits logged today.
                                 </div>
-                            )}
-                            {recentCommits.map((commit, i) => (
+                            ) : recentCommits.map((commit, i) => (
                                 <div key={commit.commitSha || i} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 20px', borderBottom: i < recentCommits.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
                                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#a9927d', marginTop: '6px', flexShrink: 0 }} />
                                     <div style={{ flex: 1 }}>
