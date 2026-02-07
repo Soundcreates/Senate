@@ -1,5 +1,5 @@
 const express = require("express");
-const { createProject, createFullProject, getProjectById, listProjects, getTodayActivity, getHistoryActivity } = require("../controllers/projectController");
+const { createProject, createFullProject, getProjectById, listProjects, getTodayActivity, getHistoryActivity, linkEscrow } = require("../controllers/projectController");
 
 const router = express.Router();
 
@@ -9,5 +9,6 @@ router.get("/", listProjects);
 router.get("/:projectId", getProjectById);
 router.get("/:projectId/activity/today", getTodayActivity);
 router.get("/:projectId/activity/history", getHistoryActivity);
+router.post("/:projectId/escrow", linkEscrow);
 
 module.exports = router;
