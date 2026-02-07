@@ -39,7 +39,7 @@ async function getRecommendations(req, res) {
         'Accept': 'application/json'
       },
       body: JSON.stringify(payload),
-      timeout: 30000 // 30 second timeout
+      timeout: 90000 // 90 second timeout for RAG model processing
     });
 
     console.log(`[Recommendation] RAG endpoint responded with status: ${response.status}`);
@@ -80,11 +80,23 @@ async function getRecommendations(req, res) {
     const recommendations = await response.json();
     
     console.log(`[Recommendation] Successfully fetched recommendations`);
+    console.log(`[Recommendation] RAG Response type:`, typeof recommendations);
+    console.log(`[Recommendation] RAG Response keys:`, Object.keys(recommendations || {}));
     console.log(`[Recommendation] RAG Response:`, JSON.stringify(recommendations, null, 2));
+
+    // Extract the actual data from n8n response
+    // n8n might return: { data: [...] } or just [...] or { people: [...] }
+    let extractedData = recommendations;
+    
+    // If n8n wraps the response in a 'data' field, unwrap it
+    if (recommendations && recommendations.data && typeof recommendations.data === 'object') {
+      extractedData = recommendations.data;
+      console.log(`[Recommendation] Extracted nested data:`, JSON.stringify(extractedData, null, 2));
+    }
 
     return res.status(200).json({
       success: true,
-      data: recommendations,
+      data: extractedData,
       query,
       timestamp: new Date().toISOString()
     });

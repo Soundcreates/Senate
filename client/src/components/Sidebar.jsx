@@ -53,6 +53,15 @@ const Sidebar = () => {
         </div>
       </div>
 
+      {/* + New Project Button */}
+      <NavLink
+        to="/admin"
+        className="nav-item mb-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98]"
+      >
+        <PlusSquare size={18} />
+        <span>+ New</span>
+      </NavLink>
+
       <nav className="flex flex-col gap-2">
         {navItems.map((item) => (
           <NavLink

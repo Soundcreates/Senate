@@ -1,119 +1,79 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-    ArrowLeft, Clock, GitCommit, Code2, Circle, Calendar,
-    CheckCircle2, AlertCircle, User, TrendingUp, Activity
+    ArrowLeft, Clock, Circle, Calendar,
+    CheckCircle2, User, TrendingUp, Loader2, DollarSign
 } from 'lucide-react';
+import { getProject } from '../Apis/projectApis';
 
-// Mock project data (keyed by ID)
-const projectsData = {
-    1: {
-        name: 'NFT Marketplace',
-        status: 'Active',
-        budget: '$15,000',
-        spent: '$9,750',
-        progress: 65,
-        dueDate: 'Feb 28, 2026',
-        startDate: 'Jan 15, 2026',
-        description: 'A full-featured NFT marketplace with minting, trading, and auction capabilities.',
-        team: [
-            { id: 1, name: 'Alice Chen', role: 'Full-Stack', avatar: '👩‍💻', hoursSpent: 48, commits: 32, codeQuality: 94, lastOnline: '2 min ago', status: 'online' },
-            { id: 2, name: 'Bob Kumar', role: 'Blockchain', avatar: '👨‍💻', hoursSpent: 36, commits: 28, codeQuality: 91, lastOnline: '1 hour ago', status: 'away' },
-            { id: 3, name: 'Charlie Park', role: 'UI/UX', avatar: '🎨', hoursSpent: 24, commits: 15, codeQuality: 88, lastOnline: '3 hours ago', status: 'offline' },
-        ],
-        tasks: [
-            { id: 1, title: 'Smart Contract Development', status: 'Completed', assignee: 'Bob Kumar', hours: 16 },
-            { id: 2, title: 'Frontend UI Implementation', status: 'In Progress', assignee: 'Alice Chen', hours: 24 },
-            { id: 3, title: 'Design System & Components', status: 'Completed', assignee: 'Charlie Park', hours: 12 },
-            { id: 4, title: 'Wallet Integration', status: 'In Progress', assignee: 'Bob Kumar', hours: 8 },
-            { id: 5, title: 'Testing & QA', status: 'Pending', assignee: 'Alice Chen', hours: 0 },
-        ],
-        activity: [
-            { id: 1, user: 'Alice Chen', action: 'pushed 3 commits to main', time: '10 min ago', type: 'commit' },
-            { id: 2, user: 'Bob Kumar', action: 'deployed contract to testnet', time: '1 hour ago', type: 'deploy' },
-            { id: 3, user: 'Charlie Park', action: 'updated design tokens', time: '3 hours ago', type: 'update' },
-            { id: 4, user: 'Alice Chen', action: 'merged PR #24: NFT Gallery', time: '5 hours ago', type: 'merge' },
-        ]
-    },
-    2: {
-        name: 'DAO Voting Tool',
-        status: 'Active',
-        budget: '$8,500',
-        spent: '$3,400',
-        progress: 40,
-        dueDate: 'Mar 15, 2026',
-        startDate: 'Feb 1, 2026',
-        description: 'Decentralized voting platform for DAO governance with on-chain proposals.',
-        team: [
-            { id: 2, name: 'Bob Kumar', role: 'Blockchain', avatar: '👨‍💻', hoursSpent: 28, commits: 22, codeQuality: 92, lastOnline: '1 hour ago', status: 'away' },
-            { id: 4, name: 'Diana Patel', role: 'AI/ML', avatar: '🧠', hoursSpent: 18, commits: 12, codeQuality: 95, lastOnline: '30 min ago', status: 'online' },
-        ],
-        tasks: [
-            { id: 1, title: 'Governance Contract', status: 'In Progress', assignee: 'Bob Kumar', hours: 20 },
-            { id: 2, title: 'Voting Algorithm', status: 'In Progress', assignee: 'Diana Patel', hours: 14 },
-            { id: 3, title: 'Frontend Dashboard', status: 'Pending', assignee: 'Bob Kumar', hours: 0 },
-        ],
-        activity: [
-            { id: 1, user: 'Diana Patel', action: 'implemented quadratic voting', time: '30 min ago', type: 'commit' },
-            { id: 2, user: 'Bob Kumar', action: 'added proposal creation', time: '2 hours ago', type: 'commit' },
-        ]
-    },
-    3: {
-        name: 'DeFi Dashboard',
-        status: 'Completed',
-        budget: '$12,000',
-        spent: '$12,000',
-        progress: 100,
-        dueDate: 'Feb 1, 2026',
-        startDate: 'Dec 15, 2025',
-        description: 'Analytics dashboard for tracking DeFi portfolio performance.',
-        team: [
-            { id: 1, name: 'Alice Chen', role: 'Full-Stack', avatar: '👩‍💻', hoursSpent: 56, commits: 45, codeQuality: 93, lastOnline: '2 min ago', status: 'online' },
-            { id: 3, name: 'Charlie Park', role: 'UI/UX', avatar: '🎨', hoursSpent: 32, commits: 20, codeQuality: 90, lastOnline: '3 hours ago', status: 'offline' },
-            { id: 5, name: 'Ethan Lee', role: 'DevOps', avatar: '⚙️', hoursSpent: 20, commits: 18, codeQuality: 96, lastOnline: '1 day ago', status: 'offline' },
-        ],
-        tasks: [
-            { id: 1, title: 'Dashboard UI', status: 'Completed', assignee: 'Alice Chen', hours: 28 },
-            { id: 2, title: 'Chart Components', status: 'Completed', assignee: 'Charlie Park', hours: 16 },
-            { id: 3, title: 'API Integration', status: 'Completed', assignee: 'Alice Chen', hours: 20 },
-            { id: 4, title: 'Deployment', status: 'Completed', assignee: 'Ethan Lee', hours: 12 },
-        ],
-        activity: [
-            { id: 1, user: 'Ethan Lee', action: 'deployed to production', time: '1 week ago', type: 'deploy' },
-            { id: 2, user: 'Alice Chen', action: 'final QA passed', time: '1 week ago', type: 'update' },
-        ]
-    },
-    4: {
-        name: 'Mobile Wallet App',
-        status: 'Pending',
-        budget: '$6,000',
-        spent: '$0',
-        progress: 0,
-        dueDate: 'Mar 20, 2026',
-        startDate: 'Feb 15, 2026',
-        description: 'Cross-platform mobile wallet for crypto asset management.',
-        team: [
-            { id: 2, name: 'Bob Kumar', role: 'Blockchain', avatar: '👨‍💻', hoursSpent: 0, commits: 0, codeQuality: 0, lastOnline: '1 hour ago', status: 'away' },
-        ],
-        tasks: [
-            { id: 1, title: 'Project Setup', status: 'Pending', assignee: 'Bob Kumar', hours: 0 },
-            { id: 2, title: 'Wallet Core', status: 'Pending', assignee: 'Bob Kumar', hours: 0 },
-        ],
-        activity: []
+/* ---- helpers ---- */
+const getStatusColor = (status) => {
+    switch (status) {
+        case 'active': case 'Active': case 'In Progress': case 'online': case 'todo':
+            return { bg: 'rgba(22, 163, 74, 0.1)', text: '#16a34a', dot: '#16a34a' };
+        case 'completed': case 'Completed': case 'done':
+            return { bg: 'rgba(169, 146, 125, 0.15)', text: '#5e503f', dot: '#5e503f' };
+        case 'pending': case 'Pending': case 'away':
+            return { bg: 'rgba(234, 88, 12, 0.1)', text: '#ea580c', dot: '#ea580c' };
+        default:
+            return { bg: '#f5f5f4', text: '#78716c', dot: '#78716c' };
     }
 };
 
+const statusLabel = (s) => {
+    if (s === 'done') return 'Completed';
+    if (s === 'in_progress') return 'In Progress';
+    if (s === 'todo') return 'Pending';
+    return s?.charAt(0).toUpperCase() + s?.slice(1) || 'Pending';
+};
+
+/* ---- component ---- */
 const ProjectDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const project = projectsData[id];
+    const [project, setProject] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-    if (!project) {
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            setLoading(true);
+            const result = await getProject(id);
+            if (!mounted) return;
+            if (result.ok) {
+                setProject(result.project);
+            } else {
+                setError(result.error || 'project_not_found');
+            }
+            setLoading(false);
+        };
+        load();
+        return () => { mounted = false; };
+    }, [id]);
+
+    /* loading */
+    if (loading) {
         return (
             <div style={{ minHeight: '100vh', background: '#fbf7ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Jost', sans-serif" }}>
+                <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');`}</style>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#a9927d' }}>
+                    <Loader2 className="animate-spin" size={24} />
+                    <span style={{ fontSize: '16px' }}>Loading project...</span>
+                </div>
+            </div>
+        );
+    }
+
+    /* error / not found */
+    if (error || !project) {
+        return (
+            <div style={{ minHeight: '100vh', background: '#fbf7ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Jost', sans-serif" }}>
+                <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');`}</style>
                 <div style={{ textAlign: 'center' }}>
                     <h2 style={{ color: '#2d2a26', marginBottom: '16px' }}>Project not found</h2>
+                    <p style={{ color: '#a9927d', marginBottom: '20px', fontSize: '14px' }}>{error}</p>
                     <button onClick={() => navigate('/dashboard')} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: '#a9927d', color: 'white', cursor: 'pointer' }}>
                         Back to Dashboard
                     </button>
@@ -122,20 +82,15 @@ const ProjectDetail = () => {
         );
     }
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'Active': case 'In Progress': case 'online': return { bg: 'rgba(22, 163, 74, 0.1)', text: '#16a34a', dot: '#16a34a' };
-            case 'Completed': return { bg: 'rgba(169, 146, 125, 0.15)', text: '#5e503f', dot: '#5e503f' };
-            case 'Pending': case 'away': return { bg: 'rgba(234, 88, 12, 0.1)', text: '#ea580c', dot: '#ea580c' };
-            case 'offline': return { bg: 'rgba(120, 113, 108, 0.1)', text: '#78716c', dot: '#78716c' };
-            default: return { bg: '#f5f5f4', text: '#78716c', dot: '#78716c' };
-        }
-    };
+    /* derived data */
+    const totalHours = (project.tasks || []).reduce((sum, t) => sum + (t.estimatedHours || 0), 0);
+    const totalTasks = (project.tasks || []).length;
+    const completedTasks = (project.tasks || []).filter(t => t.status === 'done').length;
+    const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const teamMembers = project.team || [];
+    const projectStatus = getStatusColor(project.status);
 
-    const totalHours = project.team.reduce((sum, m) => sum + m.hoursSpent, 0);
-    const totalCommits = project.team.reduce((sum, m) => sum + m.commits, 0);
-    const avgQuality = Math.round(project.team.filter(m => m.codeQuality > 0).reduce((sum, m) => sum + m.codeQuality, 0) / project.team.filter(m => m.codeQuality > 0).length) || 0;
-
+    /* ---- render ---- */
     return (
         <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif" }}>
             <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');`}</style>
@@ -150,13 +105,13 @@ const ProjectDetail = () => {
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{project.name}</h1>
-                                <span style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '20px', background: getStatusColor(project.status).bg, color: getStatusColor(project.status).text, fontWeight: '500' }}>{project.status}</span>
+                                <span style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '20px', background: projectStatus.bg, color: projectStatus.text, fontWeight: '500' }}>{project.status}</span>
                             </div>
                             <p style={{ fontSize: '14px', color: '#5e503f', margin: '8px 0 0', maxWidth: '600px' }}>{project.description}</p>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '24px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{project.budget}</p>
-                            <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>Spent: {project.spent}</p>
+                            <p style={{ fontSize: '24px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>${(project.budget || 0).toLocaleString()}</p>
+                            <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>Budget • {project.deadline || 'No deadline'}</p>
                         </div>
                     </div>
                 </div>
@@ -166,10 +121,10 @@ const ProjectDetail = () => {
                 {/* Stats Row */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
                     {[
-                        { label: 'Total Hours', value: totalHours, icon: Clock, suffix: 'h' },
-                        { label: 'Total Commits', value: totalCommits, icon: GitCommit },
-                        { label: 'Avg Code Quality', value: avgQuality, icon: Code2, suffix: '%' },
-                        { label: 'Progress', value: project.progress, icon: TrendingUp, suffix: '%' },
+                        { label: 'Est. Hours', value: totalHours, icon: Clock, suffix: 'h' },
+                        { label: 'Team Size', value: teamMembers.length, icon: User },
+                        { label: 'Tasks', value: `${completedTasks}/${totalTasks}`, icon: CheckCircle2 },
+                        { label: 'Progress', value: progressPercent, icon: TrendingUp, suffix: '%' },
                     ].map((stat, i) => (
                         <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                             style={{ background: 'white', borderRadius: '12px', padding: '16px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
@@ -185,66 +140,62 @@ const ProjectDetail = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '20px' }}>
                     {/* Left Column */}
                     <div>
-                        {/* Team Analytics */}
+                        {/* Team */}
                         <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', marginBottom: '20px' }}>
                             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(169, 146, 125, 0.1)' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Team Performance</h3>
+                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Team ({teamMembers.length})</h3>
                             </div>
                             <div style={{ padding: '12px 0' }}>
-                                {project.team.map((member, i) => {
-                                    const statusColor = getStatusColor(member.status);
-                                    return (
-                                        <div key={member.id} style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: i < project.team.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '180px' }}>
-                                                <div style={{ position: 'relative' }}>
-                                                    <span style={{ fontSize: '28px' }}>{member.avatar}</span>
-                                                    <div style={{ position: 'absolute', bottom: 0, right: 0, width: '10px', height: '10px', borderRadius: '50%', background: statusColor.dot, border: '2px solid white' }} />
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '14px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{member.name}</p>
-                                                    <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>{member.role}</p>
-                                                </div>
-                                            </div>
-                                            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', textAlign: 'center' }}>
-                                                <div>
-                                                    <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{member.hoursSpent}h</p>
-                                                    <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Time</p>
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{member.commits}</p>
-                                                    <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Commits</p>
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '16px', fontWeight: '600', color: member.codeQuality >= 90 ? '#16a34a' : member.codeQuality >= 80 ? '#ea580c' : '#78716c', margin: 0 }}>{member.codeQuality || '-'}%</p>
-                                                    <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Quality</p>
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '12px', color: '#5e503f', margin: 0 }}>{member.lastOnline}</p>
-                                                    <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Last Online</p>
-                                                </div>
+                                {teamMembers.length === 0 && (
+                                    <p style={{ padding: '16px 20px', fontSize: '13px', color: '#a9927d' }}>No team members assigned yet.</p>
+                                )}
+                                {teamMembers.map((member, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: i < teamMembers.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '200px' }}>
+                                            <span style={{ fontSize: '28px' }}>{member.avatar || '👨‍💻'}</span>
+                                            <div>
+                                                <p style={{ fontSize: '14px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{member.name}</p>
+                                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>{member.role}</p>
                                             </div>
                                         </div>
-                                    );
-                                })}
+                                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', textAlign: 'center' }}>
+                                            <div>
+                                                <p style={{ fontSize: '16px', fontWeight: '600', color: '#16a34a', margin: 0 }}>{member.match || 0}%</p>
+                                                <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Match</p>
+                                            </div>
+                                            <div>
+                                                <p style={{ fontSize: '12px', color: '#5e503f', margin: 0, lineHeight: '1.3' }}>{member.reason ? member.reason.substring(0, 60) + (member.reason.length > 60 ? '...' : '') : '—'}</p>
+                                                <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Why picked</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
                         {/* Tasks */}
                         <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
                             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(169, 146, 125, 0.1)' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Tasks</h3>
+                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Tasks ({totalTasks})</h3>
                             </div>
                             <div style={{ padding: '8px 0' }}>
-                                {project.tasks.map((task, i) => {
-                                    const statusColor = getStatusColor(task.status);
+                                {(project.tasks || []).length === 0 && (
+                                    <p style={{ padding: '16px 20px', fontSize: '13px', color: '#a9927d' }}>No tasks created yet.</p>
+                                )}
+                                {(project.tasks || []).map((task, i) => {
+                                    const tStatus = statusLabel(task.status);
+                                    const tColor = getStatusColor(task.status);
                                     return (
-                                        <div key={task.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', borderBottom: i < project.tasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
-                                            {task.status === 'Completed' ? <CheckCircle2 size={16} style={{ color: '#16a34a', marginRight: '12px' }} /> : <Circle size={16} style={{ color: '#a9927d', marginRight: '12px' }} />}
+                                        <div key={task._id || i} style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', borderBottom: i < project.tasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
+                                            {task.status === 'done' ? <CheckCircle2 size={16} style={{ color: '#16a34a', marginRight: '12px' }} /> : <Circle size={16} style={{ color: '#a9927d', marginRight: '12px' }} />}
                                             <div style={{ flex: 1 }}>
                                                 <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{task.title}</p>
-                                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>{task.assignee} • {task.hours}h</p>
+                                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>
+                                                    {(task.assignees || []).map(a => a.name).join(', ') || 'Unassigned'} • {task.estimatedHours || 0}h
+                                                    {task.priority && ` • ${task.priority}`}
+                                                </p>
                                             </div>
-                                            <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px', background: statusColor.bg, color: statusColor.text, fontWeight: '500' }}>{task.status}</span>
+                                            <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px', background: tColor.bg, color: tColor.text, fontWeight: '500' }}>{tStatus}</span>
                                         </div>
                                     );
                                 })}
@@ -252,27 +203,69 @@ const ProjectDetail = () => {
                         </div>
                     </div>
 
-                    {/* Right Column - Activity */}
-                    <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', height: 'fit-content' }}>
-                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(169, 146, 125, 0.1)' }}>
-                            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Recent Activity</h3>
-                        </div>
-                        <div style={{ padding: '12px 0' }}>
-                            {project.activity.length > 0 ? project.activity.map((item, i) => (
-                                <div key={item.id} style={{ padding: '12px 20px', borderBottom: i < project.activity.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                                        <Activity size={14} style={{ color: '#a9927d', marginTop: '2px' }} />
-                                        <div>
-                                            <p style={{ fontSize: '13px', color: '#2d2a26', margin: 0 }}>
-                                                <span style={{ fontWeight: '600' }}>{item.user}</span> {item.action}
-                                            </p>
-                                            <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>{item.time}</p>
-                                        </div>
+                    {/* Right Column */}
+                    <div>
+                        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', marginBottom: '20px', padding: '20px' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: '0 0 16px' }}>Project Details</h3>
+                            <div style={{ display: 'grid', gap: '14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <DollarSign size={16} style={{ color: '#a9927d' }} />
+                                    <div>
+                                        <p style={{ fontSize: '11px', color: '#a9927d', margin: 0 }}>Budget</p>
+                                        <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>${(project.budget || 0).toLocaleString()}</p>
                                     </div>
                                 </div>
-                            )) : (
-                                <p style={{ padding: '20px', textAlign: 'center', color: '#a9927d', fontSize: '13px' }}>No activity yet</p>
-                            )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <Calendar size={16} style={{ color: '#a9927d' }} />
+                                    <div>
+                                        <p style={{ fontSize: '11px', color: '#a9927d', margin: 0 }}>Deadline</p>
+                                        <p style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{project.deadline || 'Not set'}</p>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <User size={16} style={{ color: '#a9927d' }} />
+                                    <div>
+                                        <p style={{ fontSize: '11px', color: '#a9927d', margin: 0 }}>Created by</p>
+                                        <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{project.createdBy?.name || project.createdBy?.email || 'Admin'}</p>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <Clock size={16} style={{ color: '#a9927d' }} />
+                                    <div>
+                                        <p style={{ fontSize: '11px', color: '#a9927d', margin: 0 }}>Created</p>
+                                        <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{project.createdAt ? new Date(project.createdAt).toLocaleDateString() : '—'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Progress Card */}
+                        <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', padding: '20px' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: '0 0 16px' }}>Progress</h3>
+                            <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '13px', color: '#5e503f' }}>Completion</span>
+                                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26' }}>{progressPercent}%</span>
+                                </div>
+                                <div style={{ height: '8px', background: 'rgba(169, 146, 125, 0.2)', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <motion.div initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} transition={{ duration: 0.8, ease: 'easeOut' }}
+                                        style={{ height: '100%', background: progressPercent === 100 ? '#16a34a' : 'linear-gradient(90deg, #a9927d, #5e503f)', borderRadius: '4px' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '16px' }}>
+                                <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(22, 163, 74, 0.08)', borderRadius: '8px' }}>
+                                    <p style={{ fontSize: '18px', fontWeight: '600', color: '#16a34a', margin: 0 }}>{completedTasks}</p>
+                                    <p style={{ fontSize: '10px', color: '#16a34a', margin: '2px 0 0' }}>Done</p>
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(234, 88, 12, 0.08)', borderRadius: '8px' }}>
+                                    <p style={{ fontSize: '18px', fontWeight: '600', color: '#ea580c', margin: 0 }}>{(project.tasks || []).filter(t => t.status === 'in_progress').length}</p>
+                                    <p style={{ fontSize: '10px', color: '#ea580c', margin: '2px 0 0' }}>In Progress</p>
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(169, 146, 125, 0.1)', borderRadius: '8px' }}>
+                                    <p style={{ fontSize: '18px', fontWeight: '600', color: '#5e503f', margin: 0 }}>{(project.tasks || []).filter(t => t.status === 'todo').length}</p>
+                                    <p style={{ fontSize: '10px', color: '#5e503f', margin: '2px 0 0' }}>Pending</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
