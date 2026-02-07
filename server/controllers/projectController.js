@@ -65,8 +65,11 @@ const createProject = async (req, res) => {
 			owner: ownerLogin,
 			repo: repoData.name || projectName,
 			createdBy: sessionUser._id,
-			members: ownerLogin ? [ownerLogin] : [],
+			members: [sessionUser._id],
 		});
+
+		// Add project to admin user's projects array
+		await User.findByIdAndUpdate(sessionUser._id, { $addToSet: { projects: project._id } });
 
 		return res.status(201).json({ ok: true, project });
 	} catch (error) {
@@ -78,6 +81,156 @@ const createProject = async (req, res) => {
 	}
 };
 
+/**
+ * Full project creation from Admin flow — saves everything at once:
+ * title, description, budget, deadline, teamSize, team, tasks with assignments
+ */
+const createFullProject = async (req, res) => {
+	try {
+		const sessionUser = await getSessionUser(req);
+		if (!sessionUser) {
+			return res.status(401).json({ error: "no_session" });
+		}
+
+		const {
+			name,
+			description,
+			budget,
+			deadline,
+			teamSize,
+			team,        // [{ name, role, match, avatar, reason, userId? }]
+			tasks,       // [{ id, title, description, priority, estimatedHours, assignees: [{ name, ... }] }]
+		} = req.body;
+
+		if (!name || !description) {
+			return res.status(400).json({ error: "name_and_description_required" });
+		}
+
+		// Resolve team member user IDs by matching name/email
+		const resolvedTeam = [];
+		const memberUserIds = [sessionUser._id]; // always include admin
+
+		for (const member of (team || [])) {
+			let userId = null;
+			// Try to find user by name or email
+			if (member.userId) {
+				userId = member.userId;
+			} else if (member.name) {
+				const found = await User.findOne({
+					$or: [
+						{ name: { $regex: new RegExp(`^${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+						{ email: { $regex: new RegExp(`^${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i') } },
+					]
+				});
+				if (found) userId = found._id;
+			}
+
+			resolvedTeam.push({
+				userId: userId || null,
+				name: member.name || "Team Member",
+				role: member.role || "Developer",
+				match: member.match || 0,
+				avatar: member.avatar || "👨‍💻",
+				reason: member.reason || "",
+			});
+
+			if (userId && !memberUserIds.find(id => id.toString() === userId.toString())) {
+				memberUserIds.push(userId);
+			}
+		}
+
+		// Build tasks with assignee data
+		const projectTasks = (tasks || []).map((task) => ({
+			title: task.title || "Untitled Task",
+			description: task.description || "",
+			priority: task.priority || "Medium",
+			estimatedHours: task.estimatedHours || 0,
+			status: "todo",
+			assignees: (task.assignees || []).map(a => ({
+				userId: resolvedTeam.find(t => t.name === a.name)?.userId || null,
+				name: a.name || "Unassigned",
+				role: a.role || "",
+				match: a.match || 0,
+				avatar: a.avatar || "👨‍💻",
+				reason: a.reason || "",
+			})),
+		}));
+
+		const project = await Project.create({
+			name,
+			description,
+			budget: budget || 0,
+			deadline: deadline || "",
+			teamSize: teamSize || 3,
+			team: resolvedTeam,
+			tasks: projectTasks,
+			createdBy: sessionUser._id,
+			members: memberUserIds,
+			status: "active",
+		});
+
+		// Add project to all member users' projects arrays
+		await User.updateMany(
+			{ _id: { $in: memberUserIds } },
+			{ $addToSet: { projects: project._id } }
+		);
+
+		// Also create Task documents for the task controller compatibility
+		for (const task of projectTasks) {
+			await require("../models/Task").create({
+				projectId: project._id,
+				title: task.title,
+				description: task.description,
+				status: task.status,
+				assignees: task.assignees.map(a => a.name),
+				createdBy: sessionUser._id,
+			});
+		}
+
+		console.log(`[Project] ✅ Created full project "${name}" with ${resolvedTeam.length} members and ${projectTasks.length} tasks`);
+
+		return res.status(201).json({ ok: true, project });
+	} catch (error) {
+		console.error("Full project create failed:", {
+			message: error.message,
+			stack: error.stack,
+		});
+		return res.status(500).json({ error: "project_create_failed" });
+	}
+};
+
+const getProjectById = async (req, res) => {
+	try {
+		const sessionUser = await getSessionUser(req);
+		if (!sessionUser) {
+			return res.status(401).json({ error: "no_session" });
+		}
+
+		const project = await Project.findById(req.params.projectId)
+			.populate("createdBy", "name email avatarUrl")
+			.populate("members", "name email avatarUrl role")
+			.lean();
+
+		if (!project) {
+			return res.status(404).json({ error: "project_not_found" });
+		}
+
+		// Only allow access if user is creator or member
+		const userId = sessionUser._id.toString();
+		const isCreator = project.createdBy?._id?.toString() === userId;
+		const isMember = project.members?.some(m => m._id?.toString() === userId);
+
+		if (!isCreator && !isMember) {
+			return res.status(403).json({ error: "access_denied" });
+		}
+
+		return res.status(200).json({ ok: true, project });
+	} catch (error) {
+		console.error("Get project failed:", { message: error.message });
+		return res.status(500).json({ error: "project_get_failed" });
+	}
+};
+
 const listProjects = async (req, res) => {
 	try {
 		const sessionUser = await getSessionUser(req);
@@ -85,7 +238,14 @@ const listProjects = async (req, res) => {
 			return res.status(401).json({ error: "no_session" });
 		}
 
-		const projects = await Project.find({ createdBy: sessionUser._id })
+		// Show projects where user is creator OR member
+		const projects = await Project.find({
+			$or: [
+				{ createdBy: sessionUser._id },
+				{ members: sessionUser._id },
+			]
+		})
+			.populate("createdBy", "name email avatarUrl")
 			.sort({ createdAt: -1 })
 			.lean();
 
@@ -156,4 +316,4 @@ const getHistoryActivity = async (req, res) => {
 	}
 };
 
-module.exports = { createProject, listProjects, getTodayActivity, getHistoryActivity };
+module.exports = { createProject, createFullProject, getProjectById, listProjects, getTodayActivity, getHistoryActivity };

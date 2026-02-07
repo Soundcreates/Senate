@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Plus, Clock, Users, CheckCircle2, ArrowRight, ArrowLeft, DollarSign, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getRecommendations } from '../Apis/recommendationApi';
+import { createFullProject } from '../Apis/projectApis';
 
 // Fallback recommended people if RAG fails
 const fallbackPeople = [
@@ -20,6 +22,7 @@ const budgetOptions = [
 ];
 
 const Admin = () => {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [projectDescription, setProjectDescription] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
@@ -36,6 +39,8 @@ const Admin = () => {
   const [usingFallback, setUsingFallback] = useState(false);
   const [expandedPerson, setExpandedPerson] = useState(null);
   const [loadingStage, setLoadingStage] = useState(0);
+  const [createdProjectId, setCreatedProjectId] = useState(null);
+  const [saveError, setSaveError] = useState(null);
 
   // Calculate progress percentage
   const progress = (step / 8) * 100;
@@ -786,12 +791,54 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
 
             <motion.button
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => {
+              onClick={async () => {
                 setIsProcessingPayment(true);
-                setTimeout(() => {
+                setSaveError(null);
+                try {
+                  // Build the full project payload
+                  const selectedTeamForSave = recommendedPeople.slice(0, teamSize);
+                  const tasksForSave = tasks.map((task) => ({
+                    title: task.title,
+                    description: task.description,
+                    priority: task.priority,
+                    estimatedHours: task.estimatedHours || 0,
+                    assignees: (taskAssignments[task.id] || []).map(p => ({
+                      name: p.name,
+                      role: p.role,
+                      match: p.match,
+                      avatar: p.avatar,
+                      reason: p.reason,
+                    })),
+                  }));
+
+                  const result = await createFullProject({
+                    name: projectTitle || projectDescription,
+                    description: projectDescription,
+                    budget,
+                    deadline,
+                    teamSize,
+                    team: selectedTeamForSave.map(p => ({
+                      name: p.name,
+                      role: p.role,
+                      match: p.match,
+                      avatar: p.avatar,
+                      reason: p.reason,
+                    })),
+                    tasks: tasksForSave,
+                  });
+
+                  if (result.ok) {
+                    setCreatedProjectId(result.project._id);
+                    setStep(8);
+                  } else {
+                    setSaveError(result.error || 'Failed to create project');
+                  }
+                } catch (err) {
+                  console.error('Project save error:', err);
+                  setSaveError('Network error saving project');
+                } finally {
                   setIsProcessingPayment(false);
-                  setStep(8);
-                }, 2000);
+                }
               }}
               disabled={isProcessingPayment}
               style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#2d2a26', color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
@@ -800,6 +847,11 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
             </motion.button>
 
             <button onClick={() => setStep(6)} style={{ marginTop: '20px', background: 'none', border: 'none', color: '#a9927d', fontSize: '14px', cursor: 'pointer', textDecoration: 'underline' }}>Cancel & Go Back</button>
+            {saveError && (
+              <p style={{ marginTop: '12px', fontSize: '13px', color: '#dc2626', background: 'rgba(220,38,38,0.08)', padding: '8px 12px', borderRadius: '8px' }}>
+                {saveError}
+              </p>
+            )}
           </motion.div>
         </div>
       )}
@@ -816,8 +868,14 @@ Project: "${prompt}". Deadline: "${deadline}". Return ONLY JSON.`
               Your project <strong>"{projectTitle}"</strong> is now live. The team has been notified and funds are secured in escrow.
             </p>
             <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-              <motion.button whileHover={{ scale: 1.05 }} onClick={() => window.location.href = '/dashboard'}
-                style={{ padding: '14px 32px', borderRadius: '24px', border: 'none', background: '#2d2a26', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+              {createdProjectId && (
+                <motion.button whileHover={{ scale: 1.05 }} onClick={() => navigate(`/project/${createdProjectId}`)}
+                  style={{ padding: '14px 32px', borderRadius: '24px', border: 'none', background: '#a9927d', color: 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+                  View Project
+                </motion.button>
+              )}
+              <motion.button whileHover={{ scale: 1.05 }} onClick={() => navigate('/dashboard')}
+                style={{ padding: '14px 32px', borderRadius: '24px', border: createdProjectId ? '1px solid rgba(169,146,125,0.3)' : 'none', background: createdProjectId ? 'white' : '#2d2a26', color: createdProjectId ? '#2d2a26' : 'white', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
                 Go to Dashboard
               </motion.button>
             </div>
