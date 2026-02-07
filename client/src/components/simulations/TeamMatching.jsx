@@ -6,27 +6,35 @@ export function TeamMatchingSimulation() {
     const [matches, setMatches] = useState([]) // Array of matched candidates
 
     useEffect(() => {
+        let mounted = true;
+
         const sequence = async () => {
-            while (true) {
+            while (mounted) {
                 setMatches([])
                 await new Promise(r => setTimeout(r, 1000))
+                if (!mounted) break;
 
                 // Match 1: Designer
                 await new Promise(r => setTimeout(r, 1000))
+                if (!mounted) break;
                 setMatches(prev => [...prev, { id: 1, role: 'Designer', icon: Paintbrush, x: 80, y: -40, delay: 0 }])
 
                 // Match 2: Frontend
                 await new Promise(r => setTimeout(r, 1500))
+                if (!mounted) break;
                 setMatches(prev => [...prev, { id: 2, role: 'Frontend', icon: Code, x: -80, y: 40, delay: 0.2 }])
 
                 // Match 3: Smart Contract
                 await new Promise(r => setTimeout(r, 1500))
+                if (!mounted) break;
                 setMatches(prev => [...prev, { id: 3, role: 'Contract', icon: Terminal, x: 90, y: 50, delay: 0.4 }])
 
                 await new Promise(r => setTimeout(r, 4000))
             }
         }
         sequence()
+
+        return () => { mounted = false; }
     }, [])
 
     return (

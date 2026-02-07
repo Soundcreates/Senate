@@ -3,13 +3,69 @@ import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'fra
 import {
   Brain, Shield, Zap, BarChart3, Users, ArrowRight, ChevronDown,
   Github, Twitter, Lock, Sparkles, DollarSign, CheckCircle2, Star,
-  Layers, Bot, Wallet, GanttChart, Scale, Menu, X, Disc, Terminal, Database, ShieldCheck
+  Layers, Bot, Wallet, GanttChart, Scale, Menu, X, Disc, Terminal, Database, ShieldCheck, Play, Link
 } from 'lucide-react'
+import ArchitectureDiagram from '../components/ArchitectureDiagram'
 // import VideoBackground, { getVideoByIndex } from '../components/VideoBackground'
 import { Highlighter } from '../components/ui/highlighter'
 import { GridPattern } from '../components/ui/GridPattern'
 import { TeamMatchingSimulation } from '../components/simulations/TeamMatching'
 import { InstantPayoutSimulation } from '../components/simulations/InstantPayout'
+import { ProductDemoSimulation } from '../components/simulations/ProductDemoSimulation'
+
+/* ─── Demo Modal ─── */
+function DemoModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px'
+    }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: '900px',
+          background: '#1a1a1a', borderRadius: '24px',
+          overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}
+      >
+        <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <h3 style={{ color: 'white', margin: 0, fontFamily: 'var(--font-serif)', fontSize: '20px' }}>Platform Demo</h3>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}><X size={24} /></button>
+        </div>
+        <div style={{ aspectRatio: '16/9', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          <ProductDemoSimulation />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─── Architecture Section ─── */
+function ArchitectureSection() {
+  return (
+    <Section id="architecture">
+      <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '60px' }}>
+        <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>
+          Built for <Highlighter color="rgba(169, 146, 125, 0.4)"><span style={{ color: '#a9927d' }}>Trustless Scales.</span></Highlighter>
+        </h2>
+        <p style={{ fontSize: '18px', color: 'rgba(45, 42, 38, 0.7)', maxWidth: '600px', margin: '24px auto 0' }}>
+          A unified architecture combining AI-driven matching, verifiable productivity metrics, and blockchain-based escrow.
+        </p>
+      </motion.div>
+
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <ArchitectureDiagram />
+      </div>
+    </Section>
+  );
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    MINIMAL EARTH TONE LANDING PAGE
@@ -218,7 +274,7 @@ function Navigation() {
 }
 
 // ─── HERO (ORIGIN STYLE: CINEMATIC CENTERED) ───
-function Hero() {
+function Hero({ onPlayDemo }) {
   const fadeUp = {
     hidden: { opacity: 0, y: 30 },
     visible: (i = 0) => ({
@@ -305,7 +361,28 @@ function Hero() {
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(45, 42, 38, 0.1)'; e.currentTarget.style.background = 'rgba(45, 42, 38, 0.05)' }}
           >
             <Sparkles size={16} color="#a9927d" />
-            <span style={{ fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)' }}>"Find me a React dev for $5k..."</span>
+            <span style={{ fontSize: '14px', color: 'rgba(45, 42, 38, 0.5)', flex: 1 }}>"Find me a React dev for $5k..."</span>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); onPlayDemo(); }}
+              style={{
+                background: 'white',
+                border: '1px solid rgba(169,146,125,0.3)',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                transition: 'transform 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+            >
+              <Play size={12} fill="#a9927d" color="#a9927d" style={{ marginLeft: '1px' }} />
+            </button>
           </div>
         </motion.div>
       </div>
@@ -593,6 +670,7 @@ function Comparison() {
 }
 
 export default function LandingPage() {
+  const [demoOpen, setDemoOpen] = useState(false);
   const fadeUp = {
     hidden: { opacity: 0, y: 40 },
     visible: (i = 0) => ({
@@ -630,7 +708,7 @@ export default function LandingPage() {
       `}</style>
 
       <Navigation />
-      <Hero />
+      <Hero onPlayDemo={() => setDemoOpen(true)} />
 
       {/* ── STATS ── */}
       <Section style={{ borderTop: '1px solid rgba(94, 80, 63, 0.3)', borderBottom: '1px solid rgba(94, 80, 63, 0.3)', background: 'rgba(34, 51, 59, 0.2)' }}>
@@ -653,6 +731,7 @@ export default function LandingPage() {
 
       {/* ── FEATURES ── */}
       <Features />
+      <ArchitectureSection />
 
       {/* ── HOW IT WORKS ── */}
       <HowItWorks />
@@ -682,16 +761,16 @@ export default function LandingPage() {
             {[...Array(2)].map((_, i) => (
               <React.Fragment key={i}>
                 {[
-                  { name: 'Solana', icon: <DollarSign size={32} /> },
+                  { name: 'Sepolia', icon: <Link size={32} /> },
                   { name: 'React', icon: <Brain size={32} /> },
                   { name: 'Node.js', icon: <Terminal size={32} /> },
-                  { name: 'Arweave', icon: <Database size={32} /> },
+                  { name: 'Chroma', icon: <Database size={32} /> },
                   { name: 'WakaTime', icon: <GanttChart size={32} /> },
                   { name: 'Tailwind', icon: <Layers size={32} /> },
                   { name: 'OpenAI', icon: <Bot size={32} /> },
                   { name: 'Kleros', icon: <ShieldCheck size={32} /> }
                 ].map((tech, idx) => (
-                  <div key={idx} style={{
+                  <div key={`${i}-${idx}`} style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '16px',
@@ -711,65 +790,9 @@ export default function LandingPage() {
         </div>
       </Section>
 
-      {/* ── FAQ ── */}
-      <Section id="faq">
-        <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: 'center', marginBottom: '80px' }}>
-          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', fontWeight: '500', color: '#2d2a26', letterSpacing: '-0.02em' }}>Questions? <Highlighter color="rgba(169, 146, 125, 0.3)"><span style={{ color: 'rgba(45, 42, 38, 0.6)' }}>Answers.</span></Highlighter></h2>
-        </motion.div>
-
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          {[
-            { question: 'How does Senate ensure fair payouts?', answer: 'Senate uses objective, on-chain productivity data — GitHub commits, code quality scores from GPT-4, and milestone completion — to algorithmically calculate each contributor\'s share.' },
-            { question: 'What happens if there\'s a dispute?', answer: 'Contributors have a 3-day window to raise disputes. Disputes can be resolved via admin multi-sig review with on-chain evidence, or escalated to Kleros decentralized court.' },
-            { question: 'How fast are payouts?', answer: 'Once a milestone is finalized and the dispute window closes, contributors can withdraw their USDC instantly. No more waiting 30-60 days for invoices to be processed.' },
-            { question: 'What are the fees?', answer: 'Senate charges a flat 2.5% platform fee — compared to 20% on traditional platforms like Upwork. Additional modest fees apply for dispute resolution if needed.' },
-            { question: 'How does AI team matching work?', answer: 'Our RAG-powered engine uses semantic search across developer profiles, past project data, and skill embeddings to recommend teams with the highest predicted success probability.' },
-          ].map((faq, i) => (
-            <FAQItem key={i} question={faq.question} answer={faq.answer} />
-          ))}
-        </div>
-      </Section>
-
-      {/* ── FOOTER ── */}
-      {/* ── FOOTER ── */}
-      <footer style={{ borderTop: '1px solid rgba(169, 146, 125, 0.2)', padding: '32px 24px', background: '#fbf7ef' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/logo.png" alt="Senate" style={{ height: '20px', width: 'auto', opacity: 0.8 }} />
-            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: '16px', fontWeight: '600', color: '#2d2a26' }}>Senate Protocol</span>
-            <span style={{ fontSize: '14px', color: 'rgba(45, 42, 38, 0.4)', marginLeft: '8px' }}>© 2026</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '24px' }}>
-            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Documentation</a>
-            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>GitHub</a>
-            <a href="#" style={{ color: 'rgba(45, 42, 38, 0.6)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Contact</a>
-          </div>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <Twitter style={{ width: '18px', height: '18px', color: 'rgba(45, 42, 38, 0.6)', cursor: 'pointer' }} />
-            <Github style={{ width: '18px', height: '18px', color: 'rgba(45, 42, 38, 0.6)', cursor: 'pointer' }} />
-          </div>
-
-        </div>
-      </footer>
-
-      {/* Responsive Styles */}
-      <style>{`
-        @media (max-width: 1068px) {
-          .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
-          .hero-visual { display: none !important; }
-          h1 { font-size: 56px !important; }
-          h2 { font-size: 40px !important; }
-        }
-        @media (max-width: 734px) {
-          h1 { font-size: 40px !important; }
-          h2 { font-size: 32px !important; }
-          section { padding: 80px 16px !important; }
-        }
-      `}</style>
+      <AnimatePresence>
+        {demoOpen && <DemoModal isOpen={demoOpen} onClose={() => setDemoOpen(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

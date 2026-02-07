@@ -6,15 +6,20 @@ export function InstantPayoutSimulation() {
     const [complete, setComplete] = useState(false)
 
     useEffect(() => {
+        let mounted = true;
+
         const loop = async () => {
-            while (true) {
+            while (mounted) {
                 setComplete(false)
                 await new Promise(r => setTimeout(r, 3000))
+                if (!mounted) break;
                 setComplete(true)
                 await new Promise(r => setTimeout(r, 2000))
             }
         }
         loop()
+
+        return () => { mounted = false; }
     }, [])
 
     return (
