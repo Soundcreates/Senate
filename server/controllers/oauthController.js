@@ -270,6 +270,7 @@ async function HandleGithubOAuth(req, res) {
 		});
 
 		const userData = await userResponse.json();
+		console.log("User data: ", userData);
 		if (!userResponse.ok) {
 			return res.status(502).json({ error: "github_user_failed", details: userData });
 		}
@@ -318,7 +319,9 @@ async function HandleGithubOAuth(req, res) {
 			);
 		}
 
+
 		user.githubId = githubId;
+		user.name = userData.name;
 		user.githubTokens = {
 			accessToken: tokenData.access_token || null,
 			refreshToken: tokenData.refresh_token || null,

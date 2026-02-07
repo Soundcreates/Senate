@@ -11,26 +11,48 @@ import { fetchWakatimeStats } from '@/Apis/statApis';
 import { fetchTodayActivity, listProjectTasks, listProjects } from '@/Apis/projectApis';
 
 const buildWeekRange = () => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 6);
+    const today = new Date();
+    const day = today.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const start = new Date(today);
+    start.setDate(today.getDate() + diffToMonday);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
     const toIso = (date) => date.toISOString().slice(0, 10);
     return { start: toIso(start), end: toIso(end) };
 };
 
-const parseWakaTimeSeries = (payload) => {
+const buildWeekDays = (startIso) => {
+    const start = new Date(startIso);
+    return Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index);
+        return {
+            iso: date.toISOString().slice(0, 10),
+            day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        };
+    });
+};
+
+const parseWakaTimeSeries = (payload, startIso) => {
     const data = payload?.data?.data || [];
     if (!Array.isArray(data)) return [];
 
-    return data.map((entry) => {
+    const byDate = data.reduce((acc, entry) => {
         const dateValue = entry?.range?.date || entry?.range?.start || entry?.range?.start_date || entry?.range?.start_date_time;
-        const dayLabel = dateValue
-            ? new Date(dateValue).toLocaleDateString('en-US', { weekday: 'short' })
-            : '—';
+        if (!dateValue) return acc;
+        const key = new Date(dateValue).toISOString().slice(0, 10);
         const seconds = entry?.grand_total?.total_seconds || 0;
         const hours = Math.round((seconds / 3600) * 10) / 10;
-        return { day: dayLabel, hours, rawDate: dateValue || null };
-    });
+        acc[key] = hours;
+        return acc;
+    }, {});
+
+    return buildWeekDays(startIso).map((entry) => ({
+        day: entry.day,
+        hours: byDate[entry.iso] || 0,
+        rawDate: entry.iso,
+    }));
 };
 
 const formatRelativeTime = (value) => {
@@ -58,11 +80,17 @@ const getInitials = (name) => {
 
 const UserDashboard = () => {
     const navigate = useNavigate();
-    const { fetchUserProfile, user } = useAuth();
+    const { fetchUserProfile, user, logout } = useAuth();
     const [wakatimeData, setWakatimeData] = useState([]);
     const [projects, setProjects] = useState([]);
     const [projectTasks, setProjectTasks] = useState({});
     const [recentCommits, setRecentCommits] = useState([]);
+    const [wakatimeLoading, setWakatimeLoading] = useState(false);
+
+    const handleLogout = async () => {
+        await logout() ;
+        navigate('/login');
+    }
 
     useEffect(() => {
         let isMounted = true;
@@ -70,9 +98,13 @@ const UserDashboard = () => {
             await fetchUserProfile();
 
             const { start, end } = buildWeekRange();
+            setWakatimeLoading(true);
             const wakatimeResult = await fetchWakatimeStats({ start, end });
             if (isMounted && wakatimeResult.ok) {
-                setWakatimeData(parseWakaTimeSeries(wakatimeResult.data));
+                setWakatimeData(parseWakaTimeSeries(wakatimeResult.data, start));
+            }
+            if (isMounted) {
+                setWakatimeLoading(false);
             }
 
             const projectResult = await listProjects();
@@ -154,13 +186,30 @@ const UserDashboard = () => {
 
     return (
         <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif" }}>
-            <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');`}</style>
+            <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');
+@keyframes spin { to { transform: rotate(360deg); } }
+`}</style>
 
             {/* Header */}
             <div style={{ background: 'white', borderBottom: '1px solid rgba(169, 146, 125, 0.15)', padding: '16px 32px' }}>
                 <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '24px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>My Dashboard</h1>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <button
+                            onClick={handleLogout}
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: '10px',
+                                border: '1px solid rgba(169, 146, 125, 0.35)',
+                                background: 'white',
+                                color: '#5e503f',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Logout
+                        </button>
                         <button style={{ width: '36px', height: '36px', borderRadius: '10px', border: '1px solid rgba(169, 146, 125, 0.2)', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Bell size={18} style={{ color: '#a9927d' }} />
                         </button>
@@ -217,11 +266,26 @@ const UserDashboard = () => {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                             <div>
                                 <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Coding Activity</h3>
-                                <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>Last 7 days • {totalHours.toFixed(1)}h total</p>
+                                <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>This week • {totalHours.toFixed(1)}h total</p>
                             </div>
                             <Clock size={20} style={{ color: '#a9927d' }} />
                         </div>
-                        {wakatimeData.length === 0 ? (
+                        {wakatimeLoading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '20px 0', color: '#a9927d', fontSize: '13px' }}>
+                                <span
+                                    style={{
+                                        width: '18px',
+                                        height: '18px',
+                                        borderRadius: '50%',
+                                        border: '2px solid rgba(169, 146, 125, 0.4)',
+                                        borderTopColor: '#a9927d',
+                                        animation: 'spin 1s linear infinite',
+                                        display: 'inline-block'
+                                    }}
+                                />
+                                Loading WakaTime stats...
+                            </div>
+                        ) : wakatimeData.length === 0 ? (
                             <div style={{ fontSize: '13px', color: '#a9927d', padding: '20px 0' }}>
                                 No WakaTime data available yet.
                             </div>
