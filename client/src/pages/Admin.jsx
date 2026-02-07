@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Send, Loader2, Plus, Clock, Users, CheckCircle2, ArrowRight, ArrowLeft, DollarSign, X } from 'lucide-react';
+import { Send, Loader2, Plus, Clock, Users, CheckCircle2, ArrowRight, ArrowLeft, DollarSign, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getRecommendations } from '../Apis/recommendationApi';
 
-// Hardcoded recommended people
-const recommendedPeople = [
-  { id: 1, name: 'Alice Chen', role: 'Full-Stack', match: 92, avatar: '👩‍💻' },
-  { id: 2, name: 'Bob Kumar', role: 'Blockchain', match: 88, avatar: '👨‍💻' },
-  { id: 3, name: 'Charlie Park', role: 'UI/UX', match: 90, avatar: '🎨' },
-  { id: 4, name: 'Diana Patel', role: 'AI/ML', match: 85, avatar: '🧠' },
-  { id: 5, name: 'Ethan Lee', role: 'DevOps', match: 82, avatar: '⚙️' },
+// Fallback recommended people if RAG fails
+const fallbackPeople = [
+  { id: 1, name: 'Alice Chen', role: 'Full-Stack', match: 92, avatar: '👩‍💻', reason: 'Strong full-stack experience with React and Node.js. Previously led similar projects with successful outcomes.' },
+  { id: 2, name: 'Bob Kumar', role: 'Blockchain', match: 88, avatar: '👨‍💻', reason: 'Expert in smart contracts and Web3 integration. Has deep knowledge of Ethereum and DeFi protocols.' },
+  { id: 3, name: 'Charlie Park', role: 'UI/UX', match: 90, avatar: '🎨', reason: 'Exceptional design skills with modern frameworks. Specializes in user-centered design and prototyping.' },
+  { id: 4, name: 'Diana Patel', role: 'AI/ML', match: 85, avatar: '🧠', reason: 'Machine learning specialist with experience in RAG pipelines and AI integration for web applications.' },
+  { id: 5, name: 'Ethan Lee', role: 'DevOps', match: 82, avatar: '⚙️', reason: 'DevOps expert skilled in cloud infrastructure, CI/CD, and containerization using Docker and Kubernetes.' },
 ];
 
 const budgetOptions = [
@@ -27,6 +28,10 @@ const Admin = () => {
   const [tasks, setTasks] = useState([]);
   const [taskAssignments, setTaskAssignments] = useState({}); // { taskId: [person1, person2, ...] }
   const [draggedPerson, setDraggedPerson] = useState(null);
+  const [recommendedPeople, setRecommendedPeople] = useState(fallbackPeople);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [expandedPerson, setExpandedPerson] = useState(null);
 
   const splitIntoTasks = async (prompt) => {
     try {
@@ -61,6 +66,102 @@ Project: "${prompt}". Return ONLY JSON.`
   const handleStep3Submit = async () => {
     setStep(4);
     setIsLoading(true);
+    setIsLoadingRecommendations(true);
+
+    // Fetch recommendations from RAG endpoint
+    try {
+      const query = `Find team members for this project: ${projectDescription}. Budget: ${budget}, Team size: ${teamSize}`;
+      const context = {
+        projectDescription,
+        budget,
+        teamSize,
+        type: 'team_recommendation'
+      };
+
+      const recommendationResult = await getRecommendations(query, context);
+      
+      console.log('[Admin] Recommendation result:', recommendationResult);
+
+      if (recommendationResult.ok && recommendationResult.data) {
+        // Parse and format the recommendations from RAG
+        const ragData = recommendationResult.data;
+        
+        console.log('[Admin] RAG data received:', ragData);
+        console.log('[Admin] RAG data type:', typeof ragData, Array.isArray(ragData));
+        
+        // Check if this is just a workflow start message (n8n returns this when configured for immediate response)
+        if (ragData.message === 'Workflow was started') {
+          console.warn('[Admin] RAG workflow started but no data returned yet. Using fallback.');
+          setRecommendedPeople(fallbackPeople);
+          setUsingFallback(true);
+        } else {
+          // Try to extract people from various possible response structures
+          let people = [];
+
+          if (Array.isArray(ragData)) {
+            people = ragData;
+          } else if (ragData.recommendations && Array.isArray(ragData.recommendations)) {
+            people = ragData.recommendations;
+          } else if (ragData.team && Array.isArray(ragData.team)) {
+            people = ragData.team;
+          } else if (ragData.people && Array.isArray(ragData.people)) {
+            people = ragData.people;
+          }
+
+          // Format people to match expected structure
+          if (people.length > 0) {
+            // Default avatars and roles for variety
+            const defaultAvatars = ['👨‍💻', '👩‍💻', '🧑‍💻', '👨‍🔬', '👩‍🔬', '🧑‍🎨', '👨‍🏫', '👩‍🏫'];
+            const defaultRoles = ['Full-Stack', 'Backend', 'Frontend', 'DevOps', 'Data Science', 'UI/UX', 'Mobile', 'AI/ML'];
+            
+            const formattedPeople = people.slice(0, 5).map((person, index) => {
+              // Parse match field - handle both number and string formats (e.g., "100%" or 100)
+              let matchScore = 95 - index * 3; // Default descending scores
+              if (person.match) {
+                if (typeof person.match === 'string') {
+                  // Remove "%" and parse as integer
+                  matchScore = parseInt(person.match.replace('%', ''));
+                } else if (typeof person.match === 'number') {
+                  matchScore = person.match;
+                }
+              } else if (person.score) {
+                matchScore = typeof person.score === 'number' ? person.score : parseInt(person.score);
+              }
+              
+              return {
+                id: person.id || person.userid || index + 1,
+                name: person.name || `Team Member ${index + 1}`,
+                role: person.role || person.skills || defaultRoles[index % defaultRoles.length],
+                match: matchScore,
+                avatar: person.avatar || defaultAvatars[index % defaultAvatars.length],
+                reason: person.reason || person.explanation || person.why || 
+                        `Strong technical background and experience relevant to ${projectDescription}. Recommended based on AI-powered skill matching and project requirements.`
+              };
+            });
+
+            setRecommendedPeople(formattedPeople);
+            setUsingFallback(false);
+            console.log('[Admin] Successfully loaded RAG recommendations:', formattedPeople);
+          } else {
+            console.log('[Admin] No people in RAG response, using fallback');
+            setRecommendedPeople(fallbackPeople);
+            setUsingFallback(true);
+          }
+        }
+      } else {
+        console.warn('[Admin] RAG recommendations failed, using fallback:', recommendationResult.error);
+        setRecommendedPeople(fallbackPeople);
+        setUsingFallback(true);
+      }
+    } catch (error) {
+      console.error('[Admin] ✗ Error fetching recommendations:', error);
+      setRecommendedPeople(fallbackPeople);
+      setUsingFallback(true);
+    }
+
+    setIsLoadingRecommendations(false);
+
+    // Generate tasks
     const generatedTasks = await splitIntoTasks(projectDescription);
     setTasks(generatedTasks);
     // Initialize empty arrays for each task
@@ -100,10 +201,18 @@ Project: "${prompt}". Return ONLY JSON.`
   };
 
   const selectedTeam = recommendedPeople.slice(0, teamSize);
+  const top5People = recommendedPeople.slice(0, 5);
 
   return (
     <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500&family=Jost:wght@300;400;500;600&display=swap');`}</style>
+      
+      {/* Logo - Top Left */}
+      {step === 4 && (
+        <div style={{ position: 'absolute', top: '20px', left: '24px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
+          <img src="/logo.png" alt="Senate" style={{ height: '24px', width: 'auto' }} />
+        </div>
+      )}
 
       {/* Step 1: Project */}
       {step === 1 && (
@@ -212,19 +321,93 @@ Project: "${prompt}". Return ONLY JSON.`
                   ))}
                 </div>
 
-                {/* Team */}
-                <div style={{ width: '200px', background: 'white', borderRadius: '12px', border: '1px solid rgba(169,146,125,0.15)', padding: '14px', overflowY: 'auto' }}>
-                  <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: '0 0 12px' }}>Team</p>
-                  {selectedTeam.map((person) => (
-                    <div key={person.id} draggable onDragStart={() => handleDragStart(person)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '10px', background: '#fbf7ef', marginBottom: '8px', cursor: 'grab', border: '1px solid rgba(169,146,125,0.1)' }}>
-                      <span style={{ fontSize: '20px' }}>{person.avatar}</span>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{person.name.split(' ')[0]}</p>
-                        <p style={{ fontSize: '10px', color: '#a9927d', margin: 0 }}>{person.role}</p>
-                      </div>
+                {/* Top 5 Recommendations */}
+                <div style={{ width: '280px', background: 'white', borderRadius: '12px', border: '1px solid rgba(169,146,125,0.15)', padding: '14px', overflowY: 'auto' }}>
+                  <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: '0 0 12px' }}>
+                    Top 5 Recommendations {isLoadingRecommendations && <Loader2 className="animate-spin" size={12} style={{ display: 'inline', marginLeft: '4px', color: '#a9927d' }} />}
+                  </p>
+                  {usingFallback && !isLoadingRecommendations && (
+                    <div style={{ fontSize: '10px', color: '#ea580c', background: 'rgba(234,88,12,0.1)', padding: '6px 8px', borderRadius: '6px', marginBottom: '10px', lineHeight: '1.3' }}>
+                      ⚠ Using default recommendations. RAG service unavailable.
                     </div>
-                  ))}
+                  )}
+                  {isLoadingRecommendations ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0', flexDirection: 'column', gap: '8px' }}>
+                      <Loader2 className="animate-spin" size={20} style={{ color: '#a9927d' }} />
+                      <span style={{ fontSize: '11px', color: '#a9927d' }}>Loading recommendations...</span>
+                    </div>
+                  ) : (
+                    top5People.map((person, index) => (
+                      <div key={person.id} 
+                        draggable={index < teamSize} 
+                        onDragStart={index < teamSize ? () => handleDragStart(person) : undefined}
+                        style={{ 
+                          marginBottom: '8px', 
+                          borderRadius: '10px', 
+                          background: '#fbf7ef', 
+                          border: '1px solid rgba(169,146,125,0.1)',
+                          overflow: 'hidden'
+                        }}>
+                        <div 
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            padding: '8px 10px', 
+                            cursor: index < teamSize ? 'grab' : 'default',
+                            opacity: index < teamSize ? 1 : 0.6
+                          }}>
+                          <span style={{ fontSize: '20px' }}>{person.avatar}</span>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{person.name}</p>
+                            <p style={{ fontSize: '10px', color: '#a9927d', margin: 0 }}>{person.role}</p>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: '700', color: '#16a34a' }}>{person.match}%</span>
+                            <button 
+                              onClick={() => setExpandedPerson(expandedPerson === person.id ? null : person.id)}
+                              style={{ 
+                                background: 'none', 
+                                border: 'none', 
+                                cursor: 'pointer', 
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                color: '#a9927d'
+                              }}>
+                              {expandedPerson === person.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                          </div>
+                        </div>
+                        {expandedPerson === person.id && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            style={{ 
+                              padding: '0 10px 10px 10px',
+                              borderTop: '1px solid rgba(169,146,125,0.1)'
+                            }}>
+                            <p style={{ 
+                              fontSize: '10px', 
+                              color: '#5e503f', 
+                              margin: '8px 0 0', 
+                              lineHeight: '1.4',
+                              fontStyle: 'italic'
+                            }}>
+                              <strong style={{ color: '#a9927d' }}>Why picked:</strong> {person.reason}
+                            </p>
+                          </motion.div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  {!isLoadingRecommendations && (
+                    <p style={{ fontSize: '10px', color: '#a9927d', marginTop: '12px', textAlign: 'center', fontStyle: 'italic' }}>
+                      {teamSize < 5 ? `Drag top ${teamSize} to assign tasks` : 'Drag any to assign tasks'}
+                    </p>
+                  )}
                 </div>
               </div>
 
