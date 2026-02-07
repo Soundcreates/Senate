@@ -2,25 +2,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
-import { Github, Clock, FileText, ArrowRight, Layers, CheckCircle2, UploadCloud } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { startGithubLogin } from '@/Apis/github-authApi';
-import { uploadResume } from '@/Apis/resumeApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
+import { useWallet } from '../hooks/useWeb3';
 
 const Register = () => {
     const containerRef = useRef(null);
+    const oauthProcessedRef = useRef(false);
     const [step, setStep] = useState(1);
-    const [resumeFile, setResumeFile] = useState(null);
     const [manualEmail, setManualEmail] = useState('');
     const [manualEmailError, setManualEmailError] = useState('');
     const [wakatimeConnected, setWakatimeConnected] = useState(false);
     const [githubConnected, setGithubConnected] = useState(false);
-    const [isUploadingResume, setIsUploadingResume] = useState(false);
-    const [resumeError, setResumeError] = useState('');
     const location = useLocation();
     const navigate = useNavigate();
     const { setUser } = useAuth();
+    const { account, isConnected, isConnecting, connectWallet } = useWallet();
   
     useEffect(() => {
       const ctx = gsap.context(() => {
@@ -56,30 +54,23 @@ const Register = () => {
     const handleManualEmailContinue = () => {
         const trimmedEmail = manualEmail.trim().toLowerCase();
         if (!trimmedEmail) {
-            setManualEmailError('Please enter your WakaTime email.');
+            setManualEmailError('Please enter your email.');
+            return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmedEmail)) {
+            setManualEmailError('Please enter a valid email address.');
             return;
         }
         setManualEmailError('');
         setStep(3);
     };
 
-    const handleResumeUpload = (e) => {
-        const file = e.target.files[0];
-        if(file) setResumeFile(file);
+    const handleWalletConnect = async () => {
+        await connectWallet();
     };
 
-    const handleFinalizeDetails = async () => {
-        if (!resumeFile || isUploadingResume) return;
-        setResumeError('');
-        setIsUploadingResume(true);
-
-        const result = await uploadResume(resumeFile);
-        if (!result.ok) {
-            setResumeError('Resume upload failed. Please try again.');
-            setIsUploadingResume(false);
-            return;
-        }
-
+    const handleCompleteRegistration = () => {
         navigate('/dashboard');
     };
 
@@ -90,10 +81,12 @@ const Register = () => {
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get('oauth') !== 'success') return;
+        if (oauthProcessedRef.current) return;
 
         const provider = params.get('provider');
 
         const hydrateFromSession = async () => {
+            oauthProcessedRef.current = true;
             const result = await fetchWakatimeSession();
             if (result.ok && result.user) {
                 setUser(result.user);
@@ -103,176 +96,158 @@ const Register = () => {
                     setStep(2);
                 }
                 if (provider === 'github') {
-                    setStep(4);
+                    navigate('/dashboard');
                 }
-                window.history.replaceState({}, '', location.pathname);
+                // Clean up URL
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, '', newUrl);
             }
         };
 
         hydrateFromSession();
-    }, [location.pathname, location.search, setUser]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.search]);
   
     return (
-      <div ref={containerRef} className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative overflow-hidden text-white">
-        <div className="bg-glow absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] -z-10" />
-        <div className="bg-glow absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-[100px] -z-10" />
-        <div className="absolute inset-0 bg-grid-zinc-900/50 [mask-image:radial-gradient(ellipse_at_center,transparent_20%,black)] -z-10" />
-  
-        <div className="step-card w-full max-w-md bg-zinc-900/50 backdrop-blur-xl border border-zinc-800 rounded-3xl p-8 shadow-2xl relative">
+      <div ref={containerRef} className="min-h-screen bg-zinc-800 flex items-center justify-center p-6">
+        <div className="step-card w-full max-w-lg bg-zinc-700 rounded-2xl p-10 shadow-xl">
              {/* Progress Indicator */}
-             <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800 rounded-t-3xl overflow-hidden">
-                <div 
-                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out"
-                    style={{ width: `${getProgress()}%` }}
-                />
+             <div className="mb-8">
+                <div className="h-2 bg-zinc-600 rounded-full overflow-hidden">
+                    <div 
+                        className="h-full bg-zinc-400 transition-all duration-500 ease-out"
+                        style={{ width: `${getProgress()}%` }}
+                    />
+                </div>
             </div>
 
-          <div className="text-center mb-8 pt-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 mb-4 shadow-lg shadow-indigo-500/20">
-              <Layers size={24} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-bold text-white mb-3">
               Create Account
             </h1>
-            <p className="text-zinc-500 text-sm mt-2">
-                Step {step} of 4: {step === 1 ? 'Connect WakaTime' : step === 2 ? 'Confirm Email' : step === 3 ? 'Connect GitHub' : 'Professional Details'}
+            <p className="text-zinc-400 text-base">
+                Step {step} of 4: {step === 1 ? 'Connect WakaTime' : step === 2 ? 'Enter Email' : step === 3 ? 'Connect Wallet' : 'Connect GitHub'}
             </p>
           </div>
   
           <div className="space-y-6">
             {/* Step 1: WakaTime */}
             {step === 1 && (
-                <div className="space-y-4">
+                <div className="space-y-5">
                     <button 
                         onClick={handleWakatimeConnect}
-                        className="w-full bg-[#2c2c2c] hover:bg-[#383838] text-white py-4 rounded-2xl font-bold border border-zinc-700 transition-all flex items-center justify-between px-6 group"
+                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
                     >
-                         <div className="flex items-center gap-4">
-                            <Clock className="text-blue-400" size={24} />
-                            <div className="text-left">
-                                <span className="block text-sm font-medium">Connect WakaTime</span>
-                                <span className="block text-xs text-zinc-500">Track Coding Stats</span>
-                            </div>
-                        </div>
-                        <ArrowRight className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" size={20}/>
+                        <div className="text-lg font-semibold mb-1">Connect WakaTime</div>
+                        <div className="text-sm text-zinc-300">Track your coding statistics</div>
                     </button>
-                    <p className="text-xs text-center text-zinc-500 px-4">
+                    <p className="text-sm text-center text-zinc-400 leading-relaxed">
                         This allows us to generate your productivity analytics automatically.
                     </p>
                 </div>
             )}
 
-                        {/* Step 2: Manual Email */}
+            {/* Step 2: Email */}
             {step === 2 && (
-                 <div className="space-y-4">
-                     <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3 mb-4">
-                        <CheckCircle2 className="text-green-500" size={20} />
-                        <span className="text-sm text-green-400">WakaTime Connected</span>
+                 <div className="space-y-5">
+                     <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                        <span className="text-sm text-zinc-300">✓ WakaTime Connected</span>
                      </div>
 
-                                        <div className="space-y-3">
-                                                <label className="text-xs uppercase tracking-wider text-zinc-500">
-                                                    Enter the email you used for WakaTime
-                                                </label>
-                                                <input
-                                                    type="email"
-                                                    value={manualEmail}
-                                                    onChange={(event) => setManualEmail(event.target.value)}
-                                                    className="w-full rounded-xl bg-zinc-900 border border-zinc-700 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                                    placeholder="you@example.com"
-                                                />
-                                                {manualEmailError && (
-                                                    <p className="text-xs text-rose-400">{manualEmailError}</p>
-                                                )}
-                                                <button
-                                                    onClick={handleManualEmailContinue}
-                                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-semibold transition-all"
-                                                >
-                                                    Continue to GitHub
-                                                </button>
-                                        </div>
+                     <div className="space-y-4">
+                         <label className="block text-sm text-zinc-400 text-left">
+                             Enter your email address
+                         </label>
+                         <input
+                             type="email"
+                             value={manualEmail}
+                             onChange={(event) => setManualEmail(event.target.value)}
+                             onKeyDown={(e) => e.key === 'Enter' && handleManualEmailContinue()}
+                             className="w-full rounded-xl bg-zinc-600 border border-zinc-500 px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent"
+                             placeholder="you@example.com"
+                         />
+                         {manualEmailError && (
+                             <p className="text-sm text-red-400 text-left">{manualEmailError}</p>
+                         )}
+                         <button
+                             onClick={handleManualEmailContinue}
+                             className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all"
+                         >
+                             Continue to Wallet
+                         </button>
+                     </div>
                 </div>
             )}
 
-                        {/* Step 3: GitHub */}
-                        {step === 3 && (
-                                 <div className="space-y-4">
-                                         <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3 mb-4">
-                                                <CheckCircle2 className="text-green-500" size={20} />
-                                                <span className="text-sm text-green-400">Email Confirmed</span>
-                                         </div>
-                     
-                                        <button 
-                                                onClick={handleGithubConnect}
-                                                className="w-full bg-[#24292e] hover:bg-[#2f363d] text-white py-4 rounded-2xl font-bold border border-zinc-700 transition-all flex items-center justify-between px-6 group"
-                                        >
-                                                 <div className="flex items-center gap-4">
-                                                        <Github className="text-white" size={24} />
-                                                        <div className="text-left">
-                                                                <span className="block text-sm font-medium">Connect GitHub</span>
-                                                                <span className="block text-xs text-zinc-500">Import Repositories</span>
-                                                        </div>
-                                                </div>
-                                                <ArrowRight className="text-zinc-500 group-hover:text-white group-hover:translate-x-1 transition-all" size={20}/>
-                                        </button>
-                                        {githubConnected && (
-                                            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3">
-                                                <CheckCircle2 className="text-green-500" size={20} />
-                                                <span className="text-sm text-green-400">GitHub Connected</span>
-                                            </div>
-                                        )}
-                                 </div>
-                        )}
+            {/* Step 3: Wallet */}
+            {step === 3 && (
+                <div className="space-y-5">
+                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                        <span className="text-sm text-zinc-300">✓ Email Confirmed</span>
+                    </div>
 
-            {/* Step 4: Resume */}
-             {step === 4 && (
-                 <div className="space-y-4">
-                    <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center gap-3 mb-4">
-                        <CheckCircle2 className="text-green-500" size={20} />
-                        <span className="text-sm text-green-400">GitHub Connected</span>
-                     </div>
+                    {!isConnected ? (
+                        <>
+                            <button 
+                                onClick={handleWalletConnect}
+                                disabled={isConnecting}
+                                className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <div className="text-lg font-semibold mb-1">
+                                    {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                                </div>
+                                <div className="text-sm text-zinc-300">MetaMask or compatible wallet</div>
+                            </button>
+                            <p className="text-sm text-center text-zinc-400 leading-relaxed">
+                                We'll use your wallet address to enable blockchain features and interactions.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <div className="bg-zinc-600 rounded-xl p-5 space-y-2">
+                                <div className="text-center">
+                                    <span className="text-sm text-zinc-300 font-medium">✓ Wallet Connected</span>
+                                </div>
+                                <p className="text-xs text-zinc-400 text-center font-mono">
+                                    {account?.slice(0, 6)}...{account?.slice(-4)}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setStep(4)}
+                                className="w-full bg-zinc-500 hover:bg-zinc-400 text-white py-3 px-6 rounded-xl font-medium transition-all"
+                            >
+                                Continue to GitHub
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
 
-                    <div className="border-2 border-dashed border-zinc-700 rounded-2xl p-8 text-center hover:border-indigo-500/50 hover:bg-zinc-800/30 transition-all cursor-pointer relative group">
-                        <input 
-                            type="file" 
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
-                            onChange={handleResumeUpload}
-                        />
-                        <div className="flex flex-col items-center justify-center gap-2">
-                             <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <UploadCloud className="text-indigo-400" size={24}/>
-                             </div>
-                             <p className="text-sm font-medium text-zinc-300">
-                                {resumeFile ? resumeFile.name : 'Upload Resume (PDF)'}
-                             </p>
-                             <p className="text-xs text-zinc-500">
-                                {resumeFile ? 'Click to change' : 'Drag & drop or click to browse'}
-                             </p>
-                        </div>
+            {/* Step 4: GitHub */}
+            {step === 4 && (
+                <div className="space-y-5">
+                    <div className="bg-zinc-600 rounded-xl p-4 text-center">
+                        <span className="text-sm text-zinc-300">✓ Wallet Connected</span>
                     </div>
 
                     <button 
-                         onClick={handleFinalizeDetails}
-                         disabled={!resumeFile || isUploadingResume}
-                         className={`w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 mt-4 ${
-                             resumeFile && !isUploadingResume
-                              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-lg hover:shadow-indigo-500/20' 
-                              : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                         }`}
+                        onClick={handleGithubConnect}
+                        className="w-full bg-zinc-600 hover:bg-zinc-500 text-white py-4 px-6 rounded-xl font-medium transition-all text-center"
                     >
-                        {isUploadingResume ? 'Uploading Resume...' : 'Complete Registration'}
+                        <div className="text-lg font-semibold mb-1">Connect GitHub</div>
+                        <div className="text-sm text-zinc-300">Import repositories & contributions</div>
                     </button>
-                    {resumeError && (
-                      <p className="text-xs text-rose-400 text-center mt-2">{resumeError}</p>
-                    )}
+                    <p className="text-sm text-center text-zinc-400 leading-relaxed">
+                        Final step! Connect GitHub to analyze your code contributions and projects.
+                    </p>
                 </div>
-             )}
+            )}
           </div>
   
-          <div className="mt-8 text-center pt-6 border-t border-zinc-800">
-            <p className="text-zinc-500 text-sm">
+          <div className="mt-10 text-center pt-6 border-t border-zinc-600">
+            <p className="text-zinc-400 text-sm">
               Already have an account?{' '}
-              <Link to="/login" className="text-indigo-400 font-medium hover:text-indigo-300 transition-colors">
+              <Link to="/login" className="text-zinc-300 font-medium hover:text-white transition-colors underline">
                 Sign in
               </Link>
             </p>

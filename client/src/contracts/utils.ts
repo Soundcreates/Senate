@@ -7,6 +7,9 @@ import {
   ERC20ABI,
 } from './index';
 
+// Re-export SEPOLIA_CHAIN_ID for use in other modules
+export { SEPOLIA_CHAIN_ID };
+
 /**
  * Get ethers provider
  */
