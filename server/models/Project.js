@@ -9,6 +9,7 @@ const ProjectSchema = new mongoose.Schema(
     members: { type: [String], default: [] },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
+  
 );
 
 module.exports = mongoose.model("Project", ProjectSchema);

@@ -3,10 +3,9 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
 import Register from './pages/Register'
 import Login from './pages/Login'
-import Admin from './pages/Admin'
+import Dashboard from './pages/Dashboard'
 import { AuthProvider } from './context/AuthContext'
 import Lenis from 'lenis'
-import Dashboard from './pages/Dashboard'
 
 function App() {
   useEffect(() => {
@@ -32,7 +31,6 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<Admin />} />
           <Route path ="/dashboard" element={<Dashboard />} />
         </Routes>
       </Router>
