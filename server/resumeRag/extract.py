@@ -2,105 +2,126 @@ import os
 import json
 from dotenv import load_dotenv
 from google import genai
-
-from langchain_chroma import Chroma
-from langchain.embeddings.base import Embeddings
-from skills import SKILL_PROMPT
+import chromadb
 
 # ------------------ ENV ------------------
+
 load_dotenv()
-API_KEY = os.getenv("GOOGLE_API_KEY")
-if not API_KEY:
-    raise ValueError("GOOGLE_API_KEY missing")
 
-# ------------------ Gemini Client ------------------
-client = genai.Client(api_key=API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+CHROMA_API_KEY = os.getenv("CHROMA_API_KEY")
+CHROMA_TENANT = os.getenv("CHROMA_TENANT")
+CHROMA_DATABASE = os.getenv("CHROMA_DATABASE")
 
-# ------------------ Gemini Embeddings (MUST MATCH INGEST) ------------------
-class GeminiEmbeddings(Embeddings):
-    def embed_documents(self, texts):
-        vectors = []
-        for t in texts:
-            res = client.models.embed_content(
-                model="gemini-embedding-001",
-                contents=t
-            )
-            vectors.append(res.embeddings[0].values)
-        return vectors
+if not all([GOOGLE_API_KEY, CHROMA_API_KEY, CHROMA_TENANT, CHROMA_DATABASE]):
+    raise ValueError("Missing required environment variables")
 
-    def embed_query(self, text):
-        res = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=text
-        )
-        return res.embeddings[0].values
+# ------------------ Gemini ------------------
 
-embedding = GeminiEmbeddings()
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel("models/gemini-flash-latest")
 
-# ------------------ Chroma ------------------
-db = Chroma(
-    persist_directory="chroma_db",
-    embedding_function=embedding
+# ------------------ Chroma Cloud ------------------
+
+chroma_client = chromadb.CloudClient(
+    api_key=CHROMA_API_KEY,
+    tenant=CHROMA_TENANT,
+    database=CHROMA_DATABASE
 )
+
+collection = chroma_client.get_collection("resume_embeddings")
+
+# ------------------ Prompt ------------------
+
+SKILL_PROMPT = """
+You are an expert technical recruiter.
+
+Extract technical skills from the resume content below.
+Return ONLY valid JSON in this format:
+
+{
+  "languages": [],
+  "frameworks": [],
+  "tools": [],
+  "databases": [],
+  "cloud": []
+}
+"""
+
+# ------------------ Output Dir ------------------
 
 OUTPUT_DIR = "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ------------------ Get resume list ------------------
-store = db.get()
-resume_names = set(meta["resume"] for meta in store["metadatas"])
+# ------------------ Helpers ------------------
 
-print(f"📄 Found {len(resume_names)} resumes")
+def get_all_resumes():
+    """
+    Fetch unique resume filenames from Chroma metadata
+    """
+    results = collection.get(include=["metadatas"])
 
-# ------------------ Process each resume ------------------
-for resume in resume_names:
-    print(f"🔍 Processing {resume}")
+    resumes = set()
+    for meta in results["metadatas"]:
+        if meta and "resume" in meta:
+            resumes.add(meta["resume"])
 
-    retriever = db.as_retriever(
-        search_kwargs={
-            "k": 6,
-            "filter": {"$and": [
-                {"resume": resume},
-                {"section": {"$ne": "education"}}
-            ]
-            }
-        }
+    return sorted(resumes)
+
+
+def extract_skills_for_resume(resume_name: str):
+    """
+    Query Chroma Cloud and extract skills for a single resume
+    """
+    results = collection.query(
+        query_texts=["technical skills, programming, frameworks, tools"],
+        n_results=8,
+        where={"resume": resume_name}
     )
 
-    docs = retriever.invoke(
-        "technical skills, programming languages, frameworks, tools"
-    )
+    documents = results.get("documents", [[]])[0]
+    if not documents:
+        return None
 
-    if not docs:
-        continue
+    context = "\n\n".join(documents)
 
-    context = "\n\n".join(d.page_content for d in docs)
+    prompt = SKILL_PROMPT + "\n\nRESUME CONTENT:\n" + context
 
-    prompt = (
-        SKILL_PROMPT
-        + "\n\nRESUME CONTENT:\n"
-        + context
-    )
-
-    response = client.models.generate_content(
-        model="gemini-flash-latest",
-        contents=prompt,
-        config={
+    response = model.generate_content(
+        prompt,
+        generation_config={
             "temperature": 0,
             "response_mime_type": "application/json"
         }
     )
 
-    skills = json.loads(response.text)
+    return json.loads(response.text)
 
-    out_file = os.path.join(
-        OUTPUT_DIR,
-        resume.replace(".pdf", ".json")
-    )
 
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(skills, f, indent=4, ensure_ascii=False)
+# ------------------ Main ------------------
 
-    print(f"✅ Saved → {out_file}")
+def run():
+    print("🔍 Fetching resumes from Chroma Cloud...")
+    resumes = get_all_resumes()
+    print(f"📄 Found {len(resumes)} resumes")
 
-print("\n🎉 All resumes processed")
+    for resume in resumes:
+        print(f"⚙️  Processing {resume}")
+
+        skills = extract_skills_for_resume(resume)
+        if not skills:
+            print(f"❌ No data for {resume}")
+            continue
+
+        # Output filename: <resume_name>.json
+        output_file = resume.replace(".pdf", ".json")
+        output_path = os.path.join(OUTPUT_DIR, output_file)
+
+        with open(output_path, "w") as f:
+            json.dump(skills, f, indent=2)
+
+    print("✅ All resumes processed")
+
+
+if __name__ == "__main__":
+    run()
