@@ -78,6 +78,27 @@ const createProject = async (req, res) => {
 	}
 };
 
+const listProjects = async (req, res) => {
+	try {
+		const sessionUser = await getSessionUser(req);
+		if (!sessionUser) {
+			return res.status(401).json({ error: "no_session" });
+		}
+
+		const projects = await Project.find({ createdBy: sessionUser._id })
+			.sort({ createdAt: -1 })
+			.lean();
+
+		return res.status(200).json({ ok: true, projects });
+	} catch (error) {
+		console.error("Project list failed:", {
+			message: error.message,
+			code: error.code,
+		});
+		return res.status(500).json({ error: "project_list_failed" });
+	}
+};
+
 const getTodayActivity = async (req, res) => {
 	try {
 		const sessionUser = await getSessionUser(req);
@@ -135,4 +156,4 @@ const getHistoryActivity = async (req, res) => {
 	}
 };
 
-module.exports = { createProject, getTodayActivity, getHistoryActivity };
+module.exports = { createProject, listProjects, getTodayActivity, getHistoryActivity };

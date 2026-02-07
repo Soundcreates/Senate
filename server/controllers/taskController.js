@@ -98,4 +98,28 @@ const assignTaskMembers = async (req, res) => {
   }
 };
 
-module.exports = { createTask, assignTaskMembers };
+const listTasksForProject = async (req, res) => {
+  try {
+    const sessionUser = await getSessionUser(req);
+    if (!sessionUser) {
+      return res.status(401).json({ error: "no_session" });
+    }
+
+    const { projectId } = req.params;
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: "project_not_found" });
+    }
+
+    const tasks = await Task.find({ projectId: project._id }).sort({ createdAt: -1 }).lean();
+    return res.status(200).json({ ok: true, tasks });
+  } catch (error) {
+    console.error("Task list failed:", {
+      message: error.message,
+      code: error.code,
+    });
+    return res.status(500).json({ error: "task_list_failed" });
+  }
+};
+
+module.exports = { createTask, assignTaskMembers, listTasksForProject };
