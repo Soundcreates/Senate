@@ -196,7 +196,7 @@ async function HandleWakaTimeOAuth(req, res) {
 
 async function HandleGithubOAuth(req, res) {
 	console.log("Backend starting github oauth");
-	const { code, error, error_description: errorDescription, manualEmail, role } = req.query;
+	const { code, error, error_description: errorDescription, manualEmail, role, redirectTo } = req.query;
 	const clientId = process.env.GITHUB_CLIENT_ID;
 	const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
@@ -214,6 +214,14 @@ async function HandleGithubOAuth(req, res) {
 	const scope = process.env.GITHUB_SCOPES || "read:user user:email";
 
 	if (!code) {
+		if (redirectTo) {
+			res.cookie(OAUTH_REDIRECT_COOKIE, redirectTo, {
+				httpOnly: true,
+				sameSite: "lax",
+				secure: process.env.NODE_ENV === "production",
+				maxAge: 15 * 60 * 1000,
+			});
+		}
 		if (manualEmail) {
 			res.cookie(MANUAL_EMAIL_COOKIE, manualEmail.trim().toLowerCase(), {
 				httpOnly: true,
@@ -357,7 +365,13 @@ async function HandleGithubOAuth(req, res) {
 			maxAge: 7 * 24 * 60 * 60 * 1000,
 		});
 
-		return res.redirect(buildClientRedirectUrl({ oauth: "success", provider: "github" }, "/dashboard"));
+		const redirectPath = cookies[OAUTH_REDIRECT_COOKIE] === "register" ? "/register" : "/dashboard";
+		res.clearCookie(OAUTH_REDIRECT_COOKIE, {
+			httpOnly: true,
+			sameSite: "lax",
+			secure: process.env.NODE_ENV === "production",
+		});
+		return res.redirect(buildClientRedirectUrl({ oauth: "success", provider: "github" }, redirectPath));
 	} catch (err) {
 		console.error("GitHub token request failed", {
 			message: err.message,
