@@ -316,33 +316,36 @@ async function HandleGithubOAuth(req, res) {
 		const roleFromCookie = cookies[ROLE_COOKIE];
 		const lookupEmail = manualEmailFromCookie || email;
 
-		const userQuery = lookupEmail
-			? { $or: [{ githubId }, { email: lookupEmail }] }
-			: { githubId };
+		console.log("GitHub OAuth lookup:", { githubId, lookupEmail, manualEmailFromCookie, roleFromCookie });
 
-		const user = await User.findOne(userQuery);
+		// For dev/demo: only use email for lookup, not githubId, so admin and developer can share tokens
+		const userQuery = lookupEmail ? { email: lookupEmail } : {};
+
+		const updateFields = {
+			githubId,
+			githubUsername: userData.login || null,
+			name: userData.name || userData.login,
+			githubTokens: {
+				accessToken: tokenData.access_token || null,
+				refreshToken: tokenData.refresh_token || null,
+				expiresAt: null,
+				scope: tokenData.scope || null,
+			},
+		};
+
+		if (roleFromCookie === "admin" || roleFromCookie === "developer") {
+			updateFields.role = roleFromCookie;
+		}
+
+		const user = await User.findOneAndUpdate(userQuery, { $set: updateFields }, { new: true });
 		if (!user) {
+			console.error("GitHub OAuth: no user found for query", userQuery);
 			return res.redirect(
 				buildClientRedirectUrl({ oauth: "error", provider: "github", reason: "github_email_missing" }, "/register")
 			);
 		}
 
-
-		user.githubId = githubId;
-		user.githubUsername = userData.login || null;
-		user.name = userData.name || userData.login;
-		user.githubTokens = {
-			accessToken: tokenData.access_token || null,
-			refreshToken: tokenData.refresh_token || null,
-			expiresAt: null,
-			scope: tokenData.scope || null,
-		};
-
-		if (roleFromCookie === "admin" || roleFromCookie === "developer") {
-			user.role = roleFromCookie;
-		}
-
-		await user.save();
+		console.log("GitHub OAuth: updated user", user._id, "githubTokens.accessToken set:", Boolean(user.githubTokens?.accessToken));
 
 		if (manualEmailFromCookie) {
 			res.clearCookie(MANUAL_EMAIL_COOKIE, {

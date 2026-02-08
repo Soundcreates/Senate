@@ -130,6 +130,18 @@ const AdminDashboard = () => {
                             <item.icon size={18} /> {item.label}
                         </button>
                     ))}
+                    {/* Admin Route Button */}
+                    <button
+                        onClick={() => navigate('/admin')}
+                        style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+                            padding: '12px 20px', border: 'none', background: 'rgba(169, 146, 125, 0.08)',
+                            color: '#2d2a26', fontSize: '14px', fontWeight: '600',
+                            cursor: 'pointer', textAlign: 'left', borderLeft: '3px solid #a9927d', marginTop: '16px'
+                        }}
+                    >
+                        <Shield size={18} /> Admin Panel
+                    </button>
                 </nav>
 
                 <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(169, 146, 125, 0.15)' }}>
