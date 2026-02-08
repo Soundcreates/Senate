@@ -29,6 +29,7 @@ const Register = () => {
     const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
     const [adminError, setAdminError] = useState('');
     const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+    const [adminStep, setAdminStep] = useState(1);
     const [wakatimeConnected, setWakatimeConnected] = useState(false);
     const [githubConnected, setGithubConnected] = useState(false);
     const [resumeFile, setResumeFile] = useState(null);
@@ -94,7 +95,8 @@ const Register = () => {
     };
 
     const handleGithubConnect = () => {
-        startGithubLogin(manualEmail.trim(), "register", role);
+        const email = role === 'admin' ? adminEmail.trim() : manualEmail.trim();
+        startGithubLogin(email, "register", role);
     };
 
     const handleRoleContinue = () => {
@@ -129,7 +131,13 @@ const Register = () => {
 
         setToken(result.token);
         setUser(result.user);
-        navigate('/dashboard');
+        setManualEmail(trimmedEmail);
+        try {
+            localStorage.setItem('register.email', trimmedEmail);
+            localStorage.setItem('register.role', 'admin');
+        } catch (_e) {}
+        setAdminStep(2);
+        setIsSubmittingAdmin(false);
     };
 
     const handleDeveloperRegister = async () => {
@@ -226,6 +234,7 @@ const Register = () => {
     };
 
     const getProgress = () => {
+        if (roleChoice === 'admin') return (adminStep / 2) * 100;
         if (roleChoice !== 'developer') return 0;
         return (step / 5) * 100;
     };
@@ -254,6 +263,20 @@ const Register = () => {
                 }
                 setWakatimeConnected(Boolean(result.user.wakatimeConnected));
                 setGithubConnected(Boolean(result.user.githubConnected));
+
+                // Check if this was an admin GitHub connection
+                let storedRole = null;
+                try { storedRole = localStorage.getItem('register.role'); } catch (_e) {}
+
+                if (provider === 'github' && storedRole === 'admin') {
+                    try {
+                        localStorage.removeItem('register.email');
+                        localStorage.removeItem('register.role');
+                    } catch (_e) {}
+                    navigate('/dashboard');
+                    return;
+                }
+
                 if (provider === 'wakatime') {
                     setStep(3);
                 }
@@ -298,7 +321,7 @@ const Register = () => {
                     </h1>
                     <p className="text-[#a9927d] text-base font-['Jost']">
                         {roleChoice === 'admin'
-                            ? 'Create an admin account'
+                            ? `Step ${adminStep} of 2: ${adminStep === 1 ? 'Create Account' : 'Connect GitHub'}`
                             : roleChoice === 'developer'
                                 ? `Step ${step} of 5: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : step === 4 ? 'Profile Details' : 'Upload Resume'}`
                                 : 'Choose your role to begin'}
@@ -337,8 +360,8 @@ const Register = () => {
                         </div>
                     )}
 
-                    {/* Admin Registration */}
-                    {roleChoice === 'admin' && (
+                    {/* Admin Registration Step 1: Email/Password */}
+                    {roleChoice === 'admin' && adminStep === 1 && (
                         <div className="space-y-5">
                             <div className="space-y-4">
                                 <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Admin email</label>
@@ -376,6 +399,25 @@ const Register = () => {
                                     {isSubmittingAdmin ? 'Creating account...' : 'Create Admin Account'}
                                 </button>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Admin Registration Step 2: Connect GitHub */}
+                    {roleChoice === 'admin' && adminStep === 2 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ Account Created</span>
+                            </div>
+                            <button
+                                onClick={handleGithubConnect}
+                                className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
+                            >
+                                <div className="text-lg font-semibold mb-1 font-['Jost']">Connect GitHub</div>
+                                <div className="text-sm text-[#a9927d]">Required for repository management</div>
+                            </button>
+                            <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
+                                Connect your GitHub account to manage repositories and track developer contributions.
+                            </p>
                         </div>
                     )}
                     {/* Step 1: WakaTime */}
