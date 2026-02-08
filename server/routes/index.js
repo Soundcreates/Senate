@@ -9,6 +9,7 @@ const adminAuthRouter = require("./authRoutes");
 const githubRouter = require("./githubRoutes");
 const adminDashboardRouter = require("./adminDashboardRoutes");
 const oracleRouter = require("./oracleRoutes");
+const paymentRouter = require("./paymentRoutes");
 const router = express.Router();
 const StatRouter = require("./statRoutes");
 
@@ -22,6 +23,7 @@ router.use("/auth", adminAuthRouter);
 router.use("/github", githubRouter);
 router.use("/admin-dashboard", adminDashboardRouter);
 router.use("/oracle", oracleRouter);
+router.use("/payments", paymentRouter);
 
 router.use("/gemini", geminiRouter);
 router.use("/recommendations", recommendationRouter);

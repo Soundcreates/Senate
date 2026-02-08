@@ -18,8 +18,12 @@ const ProjectTaskSchema = new mongoose.Schema(
     description: { type: String, trim: true },
     priority: { type: String, enum: ["High", "Medium", "Low"], default: "Medium" },
     estimatedHours: { type: Number, default: 0 },
+    dueDate: { type: Date, default: null },
     status: { type: String, default: "todo" },
     assignees: [TeamMemberSchema],
+    githubIssueNumber: { type: Number, default: null },
+    githubIssueUrl: { type: String, default: null },
+    githubBranch: { type: String, default: null },
   },
   { _id: true }
 );

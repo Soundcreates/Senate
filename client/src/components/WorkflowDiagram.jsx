@@ -8,6 +8,7 @@ import ReactFlow, {
     MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { Github, ExternalLink } from 'lucide-react';
 
 // Custom node component for tasks
 const TaskNode = ({ data }) => {
@@ -50,6 +51,35 @@ const TaskNode = ({ data }) => {
                 <span style={{ fontWeight: '600', color: '#2d2a26', fontSize: '14px', flex: 1 }}>
                     {data.title}
                 </span>
+                {data.githubIssueUrl && (
+                    <a
+                        href={data.githubIssueUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`GitHub Issue #${data.githubIssueNumber || ''}`}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px',
+                            color: '#5e503f',
+                            textDecoration: 'none',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#f5f5f5';
+                            e.currentTarget.style.color = '#2d2a26';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = '#5e503f';
+                        }}
+                    >
+                        <Github size={14} />
+                        <ExternalLink size={9} />
+                    </a>
+                )}
                 <span
                     style={{
                         fontSize: '9px',

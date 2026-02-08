@@ -10,6 +10,14 @@ const TaskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     githubIssueNumber: { type: Number, default: null },
     githubIssueUrl: { type: String, default: null },
+    githubBranch: { type: String, default: null },
+    dueDate: { type: Date, default: null },
+    estimatedHours: { type: Number, default: 0 },
+    
+    // Payment tracking
+    paymentStatus: { type: String, enum: ["unpaid", "pending", "processing", "paid", "failed"], default: "unpaid" },
+    paymentMethod: { type: String, enum: ["fiat", "crypto"], default: null },
+    hasPayments: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

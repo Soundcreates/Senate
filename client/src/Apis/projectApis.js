@@ -155,6 +155,25 @@ export const fetchActivityHistory = async (projectId) => {
 };
 
 /**
+ * Get WakaTime coding stats for all team members of a project (last 7 days)
+ */
+export const getProjectCodingStats = async (projectId) => {
+  const response = await fetch(`${BASE_API}/api/projects/${projectId}/coding-stats`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, error: data.error || "coding_stats_failed" };
+  }
+
+  const data = await response.json();
+  return { ok: true, memberStats: data.memberStats || [], statsByName: data.statsByName || {} };
+};
+
+/**
  * Link an on-chain escrow contract to a project
  */
 export const linkEscrowToProject = async (projectId, { escrowAddress, txHash, chainId }) => {
@@ -172,4 +191,24 @@ export const linkEscrowToProject = async (projectId, { escrowAddress, txHash, ch
 
   const data = await response.json();
   return { ok: true, project: data.project };
+};
+
+/**
+ * Get comprehensive completion/progress stats for a project
+ * Includes GitHub activity, coding hours, timeline, and velocity data
+ */
+export const getProjectCompletionStats = async (projectId) => {
+  const response = await fetch(`${BASE_API}/api/projects/${projectId}/completion-stats`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    return { ok: false, error: data.error || "completion_stats_failed" };
+  }
+
+  const data = await response.json();
+  return { ok: true, completion: data.completion };
 };
