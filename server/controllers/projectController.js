@@ -193,9 +193,7 @@ const createFullProject = async (req, res) => {
 			members: memberUserIds,
 			status: "active",
 		});
-estimatedHours: task.estimatedHours,
-				dueDate: task.dueDate,
-				
+
 		// Now create Task documents with the project ID
 		for (const task of projectTasks) {
 			const createdTask = await Task.create({
@@ -204,6 +202,8 @@ estimatedHours: task.estimatedHours,
 				description: task.description,
 				status: task.status,
 				assignees: task.assignees.map(a => a.name),
+				estimatedHours: task.estimatedHours,
+				dueDate: task.dueDate,
 				createdBy: sessionUser._id,
 			});
 			createdTasks.push(createdTask);

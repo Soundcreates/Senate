@@ -259,6 +259,8 @@ const getTaskDetails = async (req, res) => {
       assignees: task.assignees || [],
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      dueDate: task.dueDate,
+      estimatedHours: task.estimatedHours || 0,
       githubIssueNumber: task.githubIssueNumber,
       githubIssueUrl: task.githubIssueUrl,
       github: {
@@ -301,8 +303,26 @@ const getTaskDetails = async (req, res) => {
           getPullRequestsForIssue(project.owner, project.repo, task.githubIssueNumber, token),
         ]);
 
-        if (!issueResult.error) {
+        // Check if issue is deleted (404 or closed with state_reason "not_planned")
+        if (issueResult.error && issueResult.status === 404) {
+          console.log(`[Task Details] Issue #${task.githubIssueNumber} not found (deleted) - marking task as complete`);
+          if (task.status !== 'done') {
+            task.status = 'done';
+            await task.save();
+            taskDetails.status = 'done';
+          }
+          taskDetails.github.issueDeleted = true;
+        } else if (!issueResult.error) {
           taskDetails.github.issue = issueResult.issue;
+          
+          // Check if issue was closed and deleted (state_reason: "not_planned" means closed without completion)
+          // But we'll mark as complete if issue is closed in any way since user requested it
+          if (issueResult.issue.state === 'closed' && task.status !== 'done') {
+            console.log(`[Task Details] Issue #${task.githubIssueNumber} is closed - marking task as complete`);
+            task.status = 'done';
+            await task.save();
+            taskDetails.status = 'done';
+          }
         }
 
         if (!prResult.error && prResult.prs.length > 0) {
@@ -344,13 +364,24 @@ const getTaskDetails = async (req, res) => {
             }))
           );
 
-          // Auto-update task status if PR is merged
+          // Auto-update task status if PR is merged OR issue is closed
           const hasMergedPR = prWithReviews.some(pr => pr.merged);
-          if (hasMergedPR && task.status !== 'done') {
+          const issueIsClosed = taskDetails.github.issue?.state === 'closed';
+          
+          if ((hasMergedPR || issueIsClosed) && task.status !== 'done') {
             task.status = 'done';
             await task.save();
             taskDetails.status = 'done';
-            console.log(`[Task Details] ✅ Auto-updated task status to 'done' (merged PR found)`);
+            
+            // Also update in project.tasks array
+            const Project = require('../models/Project');
+            await Project.findOneAndUpdate(
+              { _id: project._id, 'tasks._id': task._id },
+              { $set: { 'tasks.$.status': 'done' } }
+            );
+            
+            const reason = hasMergedPR ? 'PR merged' : 'issue closed';
+            console.log(`[Task Details] ✅ Auto-updated task status to 'done' (${reason})`);
           }
         } else {
           console.log(`[Task Details] No PRs found for issue #${task.githubIssueNumber}`);

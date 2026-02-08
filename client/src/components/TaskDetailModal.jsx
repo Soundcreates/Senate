@@ -1,10 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer } from 'lucide-react';
 
 const TaskDetailModal = ({ task, projectId, onClose }) => {
   const [taskDetails, setTaskDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(null);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!taskDetails?.dueDate) return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const due = new Date(taskDetails.dueDate);
+      const diff = due - now;
+
+      if (diff <= 0) {
+        setTimeRemaining({ overdue: true, days: 0, hours: 0, minutes: 0 });
+      } else {
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setTimeRemaining({ overdue: false, days, hours, minutes });
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [taskDetails?.dueDate]);
 
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -158,6 +184,57 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
                 <div style={{ background: '#fbf7ef', border: '1px solid rgba(169, 146, 125, 0.15)', borderRadius: '12px', padding: '16px' }}>
                   <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#5e503f', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Description</h3>
                   <p style={{ color: '#2d2a26', whiteSpace: 'pre-wrap', margin: 0 }}>{taskDetails.description}</p>
+                </div>
+              )}
+
+              {/* Due Date Countdown */}
+              {taskDetails.dueDate && timeRemaining && (
+                <div style={{ 
+                  background: timeRemaining.overdue 
+                    ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05))' 
+                    : timeRemaining.days <= 1 
+                      ? 'linear-gradient(135deg, rgba(251, 146, 60, 0.1), rgba(249, 115, 22, 0.05))'
+                      : 'linear-gradient(135deg, rgba(74, 222, 128, 0.1), rgba(34, 197, 94, 0.05))',
+                  border: `1px solid ${timeRemaining.overdue ? 'rgba(239, 68, 68, 0.3)' : timeRemaining.days <= 1 ? 'rgba(251, 146, 60, 0.3)' : 'rgba(74, 222, 128, 0.3)'}`, 
+                  borderRadius: '12px', 
+                  padding: '20px' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#5e503f', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                      <Timer size={16} />
+                      {timeRemaining.overdue ? 'Overdue' : 'Time Remaining'}
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#a9927d' }}>
+                      <Calendar size={14} />
+                      <span>Due: {new Date(taskDetails.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
+                        {timeRemaining.days}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Days</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
+                        {timeRemaining.hours}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Hours</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
+                        {timeRemaining.minutes}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Minutes</div>
+                    </div>
+                  </div>
+                  {taskDetails.estimatedHours > 0 && (
+                    <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(169, 146, 125, 0.08)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#5e503f' }}>
+                      <Clock size={14} />
+                      <span>Estimated: {taskDetails.estimatedHours} hours ({Math.ceil(taskDetails.estimatedHours / 8)} days)</span>
+                    </div>
+                  )}
                 </div>
               )}
 

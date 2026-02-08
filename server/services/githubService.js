@@ -656,7 +656,7 @@ const getIssueDetails = async (owner, repo, issueNumber, token) => {
     });
 
     if (!response.ok) {
-      return { issue: null, error: `Failed to fetch issue: ${response.status}` };
+      return { issue: null, error: `Failed to fetch issue: ${response.status}`, status: response.status };
     }
 
     const issue = await response.json();
