@@ -4,12 +4,14 @@ import { motion } from 'framer-motion';
 import {
     Clock, GitCommit, CheckCircle2, Calendar,
     DollarSign, Star, Code2, Bell,
-    FolderGit2, ExternalLink, Circle
+    FolderGit2, ExternalLink, Circle, Wallet, Loader2, ArrowUpRight
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { fetchWakatimeStats } from '@/Apis/statApis';
 import { listProjectTasks, listProjects } from '@/Apis/projectApis';
 import { fetchRecentCommits } from '@/Apis/githubApi';
+import { useWalletContext } from '@/context/WalletContext';
+import { getPendingWithdrawals, withdrawFromEscrow } from '@/Apis/escrowApi';
 import AdminDashboard from './AdminDashboard';
 
 const buildWeekRange = () => {
@@ -90,6 +92,12 @@ const UserDashboard = () => {
     const [recentCommitsLoading, setRecentCommitsLoading] = useState(false);
     const [wakatimeLoading, setWakatimeLoading] = useState(false);
 
+    // Blockchain withdrawal state
+    const { account, isConnected, usdcBalance, rewardBalance, connect: connectWallet, shortenAddress: shorten, getExplorerUrl } = useWalletContext();
+    const [pendingPayments, setPendingPayments] = useState([]); // [{ projectName, escrowAddress, amount }]
+    const [withdrawingFrom, setWithdrawingFrom] = useState(null);
+    const [withdrawTx, setWithdrawTx] = useState(null);
+
     const handleLogout = async () => {
         await logout() ;
         navigate('/login');
@@ -144,6 +152,48 @@ const UserDashboard = () => {
             isMounted = false;
         };
     }, [fetchUserProfile]);
+
+    // Fetch pending withdrawals from on-chain escrows
+    useEffect(() => {
+        if (!isConnected || !account || projects.length === 0) return;
+        let cancelled = false;
+        const loadPending = async () => {
+            const results = [];
+            for (const proj of projects) {
+                if (!proj.escrowAddress) continue;
+                try {
+                    const amount = await getPendingWithdrawals(proj.escrowAddress, account);
+                    if (parseFloat(amount) > 0) {
+                        results.push({ projectName: proj.name, escrowAddress: proj.escrowAddress, amount });
+                    }
+                } catch (_) { /* escrow may not exist or RPC fail */ }
+            }
+            if (!cancelled) setPendingPayments(results);
+        };
+        loadPending();
+        return () => { cancelled = true; };
+    }, [isConnected, account, projects]);
+
+    const totalPending = useMemo(
+        () => pendingPayments.reduce((s, p) => s + parseFloat(p.amount), 0),
+        [pendingPayments]
+    );
+
+    const handleWithdraw = async (escrowAddress) => {
+        setWithdrawingFrom(escrowAddress);
+        setWithdrawTx(null);
+        try {
+            const { txHash } = await withdrawFromEscrow(escrowAddress);
+            setWithdrawTx(txHash);
+            // Remove from pending list
+            setPendingPayments((prev) => prev.filter((p) => p.escrowAddress !== escrowAddress));
+        } catch (err) {
+            alert('Withdrawal failed: ' + (err.reason || err.message));
+        } finally {
+            setWithdrawingFrom(null);
+        }
+    };
+
         const totalHours = useMemo(
         () => wakatimeData.reduce((sum, entry) => sum + (entry.hours || 0), 0),
         [wakatimeData]
@@ -260,8 +310,8 @@ const UserDashboard = () => {
                                 <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>Projects</p>
                             </div>
                             <div style={{ background: '#fbf7ef', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-                                <p style={{ fontSize: '20px', fontWeight: '600', color: '#16a34a', margin: 0 }}>—</p>
-                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>Payments</p>
+                                <p style={{ fontSize: '20px', fontWeight: '600', color: '#16a34a', margin: 0 }}>{isConnected ? `$${totalPending.toFixed(2)}` : '—'}</p>
+                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '4px 0 0' }}>Pending</p>
                             </div>
                         </div>
                     </motion.div>
@@ -500,16 +550,52 @@ const UserDashboard = () => {
                         style={{ background: 'white', borderRadius: '16px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
                         <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(169, 146, 125, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Pending Payments</h3>
-                            <DollarSign size={18} style={{ color: '#a9927d' }} />
+                            <Wallet size={18} style={{ color: '#a9927d' }} />
                         </div>
                         <div style={{ padding: '20px' }}>
                             <div style={{ background: 'linear-gradient(135deg, #a9927d 0%, #5e503f 100%)', borderRadius: '14px', padding: '20px', color: 'white', marginBottom: '16px' }}>
                                 <p style={{ fontSize: '12px', opacity: 0.8, margin: '0 0 4px' }}>Total Pending</p>
-                                <p style={{ fontSize: '32px', fontWeight: '600', margin: 0 }}>—</p>
+                                <p style={{ fontSize: '32px', fontWeight: '600', margin: 0 }}>
+                                    {isConnected ? `$${totalPending.toFixed(2)}` : '—'}
+                                </p>
+                                {isConnected && (
+                                    <p style={{ fontSize: '11px', opacity: 0.7, margin: '6px 0 0' }}>{shorten(account)} • USDC Balance: ${parseFloat(usdcBalance).toFixed(2)}</p>
+                                )}
                             </div>
-                            <div style={{ fontSize: '13px', color: '#a9927d' }}>
-                                No pending payments yet.
-                            </div>
+
+                            {!isConnected ? (
+                                <button onClick={connectWallet} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid rgba(169, 146, 125, 0.3)', background: 'white', color: '#5e503f', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <Wallet size={14} /> Connect Wallet to View
+                                </button>
+                            ) : pendingPayments.length === 0 ? (
+                                <div style={{ fontSize: '13px', color: '#a9927d' }}>
+                                    No pending payments.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gap: '10px' }}>
+                                    {pendingPayments.map((p) => (
+                                        <div key={p.escrowAddress} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: '#fbf7ef', borderRadius: '10px' }}>
+                                            <div>
+                                                <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{p.projectName}</p>
+                                                <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>${p.amount} USDC</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleWithdraw(p.escrowAddress)}
+                                                disabled={withdrawingFrom === p.escrowAddress}
+                                                style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', background: '#16a34a', color: 'white', fontSize: '12px', fontWeight: '500', cursor: withdrawingFrom === p.escrowAddress ? 'not-allowed' : 'pointer', opacity: withdrawingFrom === p.escrowAddress ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                {withdrawingFrom === p.escrowAddress ? 'Withdrawing...' : 'Withdraw'}
+                                                {!withdrawingFrom && <ArrowUpRight size={12} />}
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {withdrawTx && (
+                                        <a href={getExplorerUrl(withdrawTx, 'tx')} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#a9927d', textDecoration: 'underline' }}>
+                                            View last tx on Etherscan
+                                        </a>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 </div>

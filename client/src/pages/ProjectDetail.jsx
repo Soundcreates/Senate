@@ -3,9 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
     ArrowLeft, Clock, Circle, Calendar,
-    CheckCircle2, User, TrendingUp, Loader2, DollarSign
+    CheckCircle2, User, TrendingUp, Loader2, DollarSign,
+    Shield, AlertTriangle, ExternalLink, Wallet
 } from 'lucide-react';
 import { getProject } from '../Apis/projectApis';
+import { getEscrowData, MilestoneStatusLabels, MilestoneStatusColors } from '../Apis/escrowApi';
+import { useWalletContext } from '../context/WalletContext';
+import DisputePanel from '../components/DisputePanel';
+import DeployEscrowModal from '../components/DeployEscrowModal';
+import { useAuth } from '../context/AuthContext';
 
 /* ---- helpers ---- */
 const getStatusColor = (status) => {
@@ -35,6 +41,11 @@ const ProjectDetail = () => {
     const [project, setProject] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [escrow, setEscrow] = useState(null);
+    const [escrowLoading, setEscrowLoading] = useState(false);
+    const [showDeployModal, setShowDeployModal] = useState(false);
+    const { isConnected, shortenAddress: shorten, getExplorerUrl } = useWalletContext();
+    const { user } = useAuth();
 
     useEffect(() => {
         let mounted = true;
@@ -44,6 +55,18 @@ const ProjectDetail = () => {
             if (!mounted) return;
             if (result.ok) {
                 setProject(result.project);
+                // Load on-chain escrow data if linked
+                if (result.project.escrowAddress) {
+                    setEscrowLoading(true);
+                    try {
+                        const data = await getEscrowData(result.project.escrowAddress);
+                        if (mounted) setEscrow(data);
+                    } catch (err) {
+                        console.error('Escrow load failed:', err);
+                    } finally {
+                        if (mounted) setEscrowLoading(false);
+                    }
+                }
             } else {
                 setError(result.error || 'project_not_found');
             }
@@ -112,6 +135,16 @@ const ProjectDetail = () => {
                         <div style={{ textAlign: 'right' }}>
                             <p style={{ fontSize: '24px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>${(project.budget || 0).toLocaleString()}</p>
                             <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>Budget • {project.deadline || 'No deadline'}</p>
+                            {!project.escrowAddress && user && project.createdBy && (user._id === project.createdBy._id || user._id === project.createdBy) && (
+                                <button onClick={() => setShowDeployModal(true)} style={{ marginTop: '8px', padding: '6px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #a9927d, #5e503f)', color: 'white', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <Shield size={12} /> Deploy Escrow
+                                </button>
+                            )}
+                            {project.escrowAddress && (
+                                <a href={getExplorerUrl(project.escrowAddress, 'address')} target="_blank" rel="noreferrer" style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#16a34a', textDecoration: 'none' }}>
+                                    <CheckCircle2 size={10} /> Escrow Active
+                                </a>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -201,6 +234,25 @@ const ProjectDetail = () => {
                                 })}
                             </div>
                         </div>
+
+                        {/* Dispute & Finalization Panel */}
+                        {project.escrowAddress && escrow && (
+                            <div style={{ marginTop: '20px' }}>
+                                <DisputePanel
+                                    escrowAddress={project.escrowAddress}
+                                    milestones={escrow.milestones}
+                                    contributors={escrow.contributors}
+                                    oracle={escrow.oracle}
+                                    arbitrator={escrow.arbitrator}
+                                    onRefresh={async () => {
+                                        try {
+                                            const data = await getEscrowData(project.escrowAddress);
+                                            setEscrow(data);
+                                        } catch (_) {}
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Column */}
@@ -267,9 +319,92 @@ const ProjectDetail = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Escrow & Milestones Card */}
+                        {project.escrowAddress && (
+                            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(169, 146, 125, 0.15)', padding: '20px', marginTop: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                    <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Escrow</h3>
+                                    <a href={getExplorerUrl(project.escrowAddress, 'address')} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#a9927d', textDecoration: 'none' }}>
+                                        {shorten(project.escrowAddress)} <ExternalLink size={10} />
+                                    </a>
+                                </div>
+
+                                {escrowLoading ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a9927d', fontSize: '13px' }}>
+                                        <Loader2 size={14} className="animate-spin" /> Loading on-chain data...
+                                    </div>
+                                ) : escrow ? (
+                                    <>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '14px' }}>
+                                            <div style={{ background: '#fbf7ef', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                                                <p style={{ fontSize: '18px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>${escrow.totalBudget}</p>
+                                                <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>On-chain Budget</p>
+                                            </div>
+                                            <div style={{ background: '#fbf7ef', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                                                <p style={{ fontSize: '18px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{escrow.milestones.length}</p>
+                                                <p style={{ fontSize: '10px', color: '#a9927d', margin: '2px 0 0' }}>Milestones</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Milestone timeline */}
+                                        <div style={{ display: 'grid', gap: '8px' }}>
+                                            {escrow.milestones.map((ms, i) => {
+                                                const statusColor = MilestoneStatusColors[ms.status] || MilestoneStatusColors[0];
+                                                const deadlineDate = ms.deadline ? new Date(ms.deadline * 1000).toLocaleDateString() : '—';
+                                                return (
+                                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < escrow.milestones.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
+                                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: statusColor.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                            {ms.status === 3 ? <CheckCircle2 size={12} style={{ color: statusColor.text }} /> :
+                                                             ms.status === 2 ? <AlertTriangle size={12} style={{ color: statusColor.text }} /> :
+                                                             <Circle size={12} style={{ color: statusColor.text }} />}
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ fontSize: '13px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>Milestone {i + 1}</p>
+                                                            <p style={{ fontSize: '10px', color: '#a9927d', margin: '1px 0 0' }}>${ms.budget} • Due {deadlineDate}</p>
+                                                        </div>
+                                                        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '6px', background: statusColor.bg, color: statusColor.text, fontWeight: '500' }}>
+                                                            {MilestoneStatusLabels[ms.status]}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Contributors */}
+                                        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(169, 146, 125, 0.1)' }}>
+                                            <p style={{ fontSize: '11px', fontWeight: '600', color: '#5e503f', margin: '0 0 8px' }}>On-chain Contributors ({escrow.contributors.length})</p>
+                                            {escrow.contributors.map((addr, i) => (
+                                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                                    <Wallet size={10} style={{ color: '#a9927d' }} />
+                                                    <a href={getExplorerUrl(addr, 'address')} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#5e503f', fontFamily: 'monospace', textDecoration: 'none' }}>
+                                                        {shorten(addr)}
+                                                    </a>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ fontSize: '13px', color: '#a9927d' }}>
+                                        Could not load escrow data from chain.
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
+
+            {/* Deploy Escrow Modal */}
+            <DeployEscrowModal
+                isOpen={showDeployModal}
+                onClose={() => setShowDeployModal(false)}
+                project={project}
+                onDeployed={(addr) => {
+                    setProject(prev => ({ ...prev, escrowAddress: addr }));
+                    getEscrowData(addr).then(data => setEscrow(data)).catch(() => {});
+                }}
+            />
         </div>
     );
 };

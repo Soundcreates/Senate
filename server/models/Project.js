@@ -38,6 +38,9 @@ const ProjectSchema = new mongoose.Schema(
     team: [TeamMemberSchema],
     tasks: [ProjectTaskSchema],
     status: { type: String, enum: ["active", "completed", "pending"], default: "active" },
+    escrowAddress: { type: String, trim: true, default: null },
+    escrowTxHash: { type: String, trim: true, default: null },
+    escrowChainId: { type: Number, default: null },
   },
   { timestamps: true }
 );
