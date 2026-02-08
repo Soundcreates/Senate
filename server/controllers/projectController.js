@@ -34,9 +34,13 @@ const createProject = async (req, res) => {
 			return res.status(401).json({ error: "no_session" });
 		}
 
-		const token = sessionUser.githubTokens?.accessToken;
+		// Use user's token or fallback to env token for testing
+		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
 		if (!token) {
 			return res.status(400).json({ error: "github_not_connected" });
+		}
+		if (!sessionUser.githubTokens?.accessToken) {
+			console.log(`[GitHub] Using environment token (GITHUB_TOKEN) for user ${sessionUser.name || sessionUser.email}`);
 		}
 
 		const projectName = (req.body?.name || "").trim();
@@ -47,6 +51,10 @@ const createProject = async (req, res) => {
 		console.log(`\n[Simple Project] Creating project "${projectName}"...`);
 		console.log(`[GitHub] Creating repository...`);
 		const repoData = await createRepo(projectName, req.body?.description || "", token);
+		
+		if (repoData.name !== projectName) {
+			console.log(`[GitHub] ℹ️  Repository name sanitized: "${projectName}" → "${repoData.name}"`);
+		}
 		console.log(`[GitHub] ✅ Repository created: ${repoData.owner?.login}/${repoData.name}`);
 		console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
@@ -182,8 +190,12 @@ const createFullProject = async (req, res) => {
 		}
 
 		// --- GitHub integration: create repo, issues, invitations, assignments — all in parallel ---
-		const token = sessionUser.githubTokens?.accessToken;
+		// Use user's token or fallback to env token for testing
+		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
 		if (token) {
+			if (!sessionUser.githubTokens?.accessToken) {
+				console.log(`[GitHub] Using environment token (GITHUB_TOKEN) for user ${sessionUser.name || sessionUser.email}`);
+			}
 			console.log(`\n[GitHub Integration] Starting for project "${name}"...`);
 			try {
 				// Step 1: Create the GitHub repo
@@ -191,6 +203,10 @@ const createFullProject = async (req, res) => {
 				const repoData = await createRepo(name, description, token);
 				const ownerLogin = repoData.owner?.login || "";
 				const repoName = repoData.name || name;
+				
+				if (repoName !== name) {
+					console.log(`[GitHub] ℹ️  Repository name sanitized: "${name}" → "${repoName}"`);
+				}
 				console.log(`[GitHub] ✅ Repository created: ${ownerLogin}/${repoName}`);
 				console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
