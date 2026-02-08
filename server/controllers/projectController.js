@@ -34,13 +34,20 @@ const createProject = async (req, res) => {
 			return res.status(401).json({ error: "no_session" });
 		}
 
-		// Use user's token or fallback to env token for testing
-		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
-		if (!token) {
-			return res.status(400).json({ error: "github_not_connected" });
+
+		// Try user token, then GITHUB_TOKEN, then GITHUB_CLASSIC_TOKEN
+		const tokensToTry = [];
+		if (sessionUser.githubTokens?.accessToken) {
+			tokensToTry.push({ token: sessionUser.githubTokens.accessToken, label: 'user GitHub token' });
 		}
-		if (!sessionUser.githubTokens?.accessToken) {
-			console.log(`[GitHub] Using environment token (GITHUB_TOKEN) for user ${sessionUser.name || sessionUser.email}`);
+		if (process.env.GITHUB_TOKEN) {
+			tokensToTry.push({ token: process.env.GITHUB_TOKEN, label: 'env GITHUB_TOKEN' });
+		}
+		if (process.env.GITHUB_CLASSIC_TOKEN) {
+			tokensToTry.push({ token: process.env.GITHUB_CLASSIC_TOKEN, label: 'env GITHUB_CLASSIC_TOKEN' });
+		}
+		if (tokensToTry.length === 0) {
+			return res.status(400).json({ error: "github_not_connected", details: "No GitHub token available (user or env)" });
 		}
 
 		const projectName = (req.body?.name || "").trim();
@@ -49,9 +56,25 @@ const createProject = async (req, res) => {
 		}
 
 		console.log(`\n[Simple Project] Creating project "${projectName}"...`);
-		console.log(`[GitHub] Creating repository...`);
-		const repoData = await createRepo(projectName, req.body?.description || "", token);
-		
+		let repoData = null;
+		let lastError = null;
+		for (const { token, label } of tokensToTry) {
+			try {
+				console.log(`[GitHub] Trying to create repo with ${label}...`);
+				repoData = await createRepo(projectName, req.body?.description || "", token);
+				console.log(`[GitHub] ✅ Repo created with ${label}`);
+				break;
+			} catch (err) {
+				lastError = err;
+				console.error(`[GitHub] ❌ Failed to create repo with ${label}:`, err.message);
+				if (err.status) console.error(`[GitHub]    Status:`, err.status);
+				if (err.details) console.error(`[GitHub]    Details:`, JSON.stringify(err.details, null, 2));
+			}
+		}
+		if (!repoData) {
+			return res.status(500).json({ error: "github_repo_create_failed", details: lastError?.details || lastError?.message || "Unknown error" });
+		}
+
 		if (repoData.name !== projectName) {
 			console.log(`[GitHub] ℹ️  Repository name sanitized: "${projectName}" → "${repoData.name}"`);
 		}
@@ -59,7 +82,7 @@ const createProject = async (req, res) => {
 		console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
 		const ownerLogin = repoData.owner?.login || "";
-		
+
 		// Set up Copilot code review workflow
 		console.log(`[GitHub] Setting up Copilot code review workflow...`);
 		const workflowResult = await setupCopilotWorkflow(ownerLogin, repoData.name, token);
