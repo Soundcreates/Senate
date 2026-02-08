@@ -8,6 +8,7 @@ import AdminDashboard from './AdminDashboard';
 import { useNavigate } from 'react-router-dom';
 import { fetchWakatimeStats } from '@/Apis/statApis';
 import { fetchActivityHistory, fetchTodayActivity, listProjectTasks, listProjects } from '@/Apis/projectApis';
+import TaskDetailModal from '@/components/TaskDetailModal';
 
 const STATUS_COLUMNS = [
   { key: 'todo', label: 'To Do' },
@@ -61,6 +62,7 @@ const Dashboard = () => {
   const [todayCommits, setTodayCommits] = useState(0);
   const [todayHours, setTodayHours] = useState(0);
   const [historySeries, setHistorySeries] = useState([]);
+  const [selectedTask, setSelectedTask] = useState(null);
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.dashboard-header', {
@@ -310,12 +312,19 @@ const Dashboard = () => {
             </div>
             <div className="space-y-3">
               {tasks.filter((task) => task.status === column.key).map((task) => (
-                <div key={task._id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl hover:border-zinc-700 transition-colors cursor-move group">
+                <div 
+                  key={task._id} 
+                  className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl hover:border-zinc-700 transition-colors cursor-pointer group"
+                  onClick={() => setSelectedTask(task)}
+                >
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-[10px] px-2 py-1 rounded-md mb-2 inline-block font-medium bg-zinc-800 text-zinc-300 border border-zinc-700">
                       {column.label}
                     </span>
-                    <button className="text-zinc-600 hover:text-white transition-colors">
+                    <button 
+                      className="text-zinc-600 hover:text-white transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <MoreHorizontal size={16} />
                     </button>
                   </div>
@@ -358,6 +367,15 @@ const Dashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* Task Detail Modal */}
+      {selectedTask && activeProject && (
+        <TaskDetailModal
+          task={selectedTask}
+          projectId={activeProject._id}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
     </div>
   );
 };

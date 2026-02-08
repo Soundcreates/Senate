@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
     Clock, GitCommit, CheckCircle2, Calendar,
     DollarSign, Star, Code2, Bell,
-    FolderGit2, ExternalLink, Circle, Wallet, Loader2, ArrowUpRight
+    FolderGit2, ExternalLink, Circle, Wallet, Loader2, ArrowUpRight, Github
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { fetchWakatimeStats } from '@/Apis/statApis';
@@ -13,6 +13,7 @@ import { fetchRecentCommits } from '@/Apis/githubApi';
 import { useWalletContext } from '@/context/WalletContext';
 import { getPendingWithdrawals, withdrawFromEscrow } from '@/Apis/escrowApi';
 import AdminDashboard from './AdminDashboard';
+import TaskDetailModal from '@/components/TaskDetailModal';
 
 const buildWeekRange = () => {
     const today = new Date();
@@ -97,6 +98,10 @@ const UserDashboard = () => {
     const [pendingPayments, setPendingPayments] = useState([]); // [{ projectName, escrowAddress, amount }]
     const [withdrawingFrom, setWithdrawingFrom] = useState(null);
     const [withdrawTx, setWithdrawTx] = useState(null);
+
+    // Task detail modal state
+    const [selectedTask, setSelectedTask] = useState(null);
+    const [selectedProjectId, setSelectedProjectId] = useState(null);
 
     const handleLogout = async () => {
         await logout() ;
@@ -213,8 +218,12 @@ const UserDashboard = () => {
                 .filter((task) => task.status !== 'done')
                 .slice(0, 2)
                 .map((task) => ({
+                    _id: task._id,
                     title: task.title,
                     status: task.status === 'in_progress' ? 'In Progress' : 'Pending',
+                    githubIssueUrl: task.githubIssueUrl || null,
+                    githubIssueNumber: task.githubIssueNumber || null,
+                    githubBranch: task.githubBranch || null,
                 }));
 
             return {
@@ -389,19 +398,35 @@ const UserDashboard = () => {
                                     No projects yet. Create one to see analytics.
                                 </div>
                             )}
-                            {projectCards.map((project) => (
+                            {projectCards.map((project) => {
+                                const githubUrl = projects.find(p => p._id === project.id) && projects.find(p => p._id === project.id).owner && projects.find(p => p._id === project.id).repo
+                                    ? `https://github.com/${projects.find(p => p._id === project.id).owner}/${projects.find(p => p._id === project.id).repo}`
+                                    : null;
+                                return (
                                 <div key={project.id} onClick={() => navigate(`/project/${project.id}`)}
                                     style={{ background: '#fbf7ef', borderRadius: '14px', padding: '18px', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid transparent' }}
                                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(169, 146, 125, 0.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                                     {/* Header */}
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                                        <div>
+                                        <div style={{ flex: 1 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{project.name}</h4>
                                                 <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: project.status === 'Active' ? 'rgba(22, 163, 74, 0.1)' : 'rgba(169, 146, 125, 0.15)', color: project.status === 'Active' ? '#16a34a' : '#5e503f', fontWeight: '500' }}>{project.status}</span>
                                             </div>
                                             <p style={{ fontSize: '12px', color: '#a9927d', margin: '4px 0 0' }}>{project.role}</p>
+                                            {githubUrl && (
+                                                <a
+                                                    href={githubUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#5e503f', marginTop: '4px', textDecoration: 'none' }}
+                                                >
+                                                    <Github size={12} />
+                                                    {project.repoLabel}
+                                                </a>
+                                            )}
                                         </div>
                                         <ExternalLink size={16} style={{ color: '#a9927d' }} />
                                     </div>
@@ -457,16 +482,46 @@ const UserDashboard = () => {
                                         <div style={{ marginTop: '10px', padding: '10px', background: 'white', borderRadius: '8px' }}>
                                             <p style={{ fontSize: '11px', fontWeight: '600', color: '#5e503f', margin: '0 0 8px' }}>Pending Tasks:</p>
                                             {project.tasks.map((task, i) => (
-                                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: i < project.tasks.length - 1 ? '6px' : 0 }}>
+                                                <div 
+                                                    key={i} 
+                                                    onClick={() => {
+                                                        setSelectedTask(task);
+                                                        setSelectedProjectId(project.id);
+                                                    }}
+                                                    style={{ 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        gap: '6px', 
+                                                        marginBottom: i < project.tasks.length - 1 ? '6px' : 0,
+                                                        cursor: 'pointer',
+                                                        padding: '4px',
+                                                        borderRadius: '4px',
+                                                        transition: 'background 0.2s'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(169, 146, 125, 0.1)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                >
                                                     <Circle size={8} style={{ color: task.status === 'In Progress' ? '#ea580c' : '#a9927d' }} />
-                                                    <span style={{ fontSize: '12px', color: '#2d2a26' }}>{task.title}</span>
-                                                    <span style={{ fontSize: '10px', color: '#a9927d', marginLeft: 'auto' }}>{task.status}</span>
+                                                    <span style={{ fontSize: '12px', color: '#2d2a26', flex: 1 }}>{task.title}</span>
+                                                    {task.githubIssueUrl && (
+                                                        <a
+                                                            href={task.githubIssueUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', fontSize: '10px', color: '#a9927d', textDecoration: 'none' }}
+                                                            title={`GitHub Issue #${task.githubIssueNumber}`}
+                                                        >
+                                                            <Github size={10} />
+                                                        </a>
+                                                    )}
+                                                    <span style={{ fontSize: '10px', color: '#a9927d' }}>{task.status}</span>
                                                 </div>
                                             ))}
                                         </div>
                                     )}
                                 </div>
-                            ))}
+                            );})}
                         </div>
                     </div>
                 </motion.div>
@@ -611,6 +666,18 @@ const UserDashboard = () => {
                     </motion.div>
                 </div>
             </div>
+
+            {/* Task Detail Modal */}
+            {selectedTask && selectedProjectId && (
+                <TaskDetailModal
+                    task={selectedTask}
+                    projectId={selectedProjectId}
+                    onClose={() => {
+                        setSelectedTask(null);
+                        setSelectedProjectId(null);
+                    }}
+                />
+            )}
         </div>
     );
 };

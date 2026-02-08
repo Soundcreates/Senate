@@ -2,7 +2,7 @@ const Project = require("../models/Project");
 const ProjectDailyStats = require("../models/ProjectDailyStats");
 const User = require("../models/UserSchema");
 const { getTodayCommits } = require("../services/githubService");
-const { createIssue, checkCollaborator, addCollaborator, assignIssue, createRepo, createLabel } = require("../services/githubService");
+const { createIssue, checkCollaborator, addCollaborator, assignIssue, createRepo, createLabel, setupCopilotWorkflow, createBranch } = require("../services/githubService");
 const { storeTodayStats } = require("../services/projectStatsService");
 
 const parseCookies = (req) => {
@@ -59,6 +59,16 @@ const createProject = async (req, res) => {
 		console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
 		const ownerLogin = repoData.owner?.login || "";
+		
+		// Set up Copilot code review workflow
+		console.log(`[GitHub] Setting up Copilot code review workflow...`);
+		const workflowResult = await setupCopilotWorkflow(ownerLogin, repoData.name, token);
+		if (workflowResult.success) {
+			console.log(`[GitHub] ✅ Copilot workflow created: .github/workflows/copilot-review.yml`);
+		} else {
+			console.error(`[GitHub] ❌ Failed to create workflow:`, workflowResult.error);
+		}
+
 		const project = await Project.create({
 			name: projectName,
 			owner: ownerLogin,
@@ -140,23 +150,37 @@ const createFullProject = async (req, res) => {
 			}
 		}
 
-		// Build tasks with assignee data
-		const projectTasks = (tasks || []).map((task) => ({
-			title: task.title || "Untitled Task",
-			description: task.description || "",
-			priority: task.priority || "Medium",
-			estimatedHours: task.estimatedHours || 0,
-			status: "todo",
-			assignees: (task.assignees || []).map(a => ({
-				userId: resolvedTeam.find(t => t.name === a.name)?.userId || null,
-				name: a.name || "Unassigned",
-				role: a.role || "",
-				match: a.match || 0,
-				avatar: a.avatar || "👨‍💻",
-				reason: a.reason || "",
-			})),
-		}));
+		// Build tasks with assignee data and calculate due dates
+		const projectTasks = (tasks || []).map((task) => {
+			// Calculate due date based on estimated hours (assuming 8 hours/day)
+			const estimatedHours = task.estimatedHours || 8;
+			const daysNeeded = Math.ceil(estimatedHours / 8);
+			const dueDate = new Date();
+			dueDate.setDate(dueDate.getDate() + daysNeeded);
+			
+			return {
+				title: task.title || "Untitled Task",
+				description: task.description || "",
+				priority: task.priority || "Medium",
+				estimatedHours: estimatedHours,
+				dueDate: dueDate,
+				status: "todo",
+				assignees: (task.assignees || []).map(a => ({
+					userId: resolvedTeam.find(t => t.name === a.name)?.userId || null,
+					name: a.name || "Unassigned",
+					role: a.role || "",
+					match: a.match || 0,
+					avatar: a.avatar || "👨‍💻",
+					reason: a.reason || "",
+				})),
+			};
+		});
 
+		// Create Task documents FIRST to get their IDs
+		const Task = require("../models/Task");
+		const createdTasks = [];
+		
+		// We need to create a project first to get the project ID for tasks
 		const project = await Project.create({
 			name,
 			description,
@@ -164,22 +188,17 @@ const createFullProject = async (req, res) => {
 			deadline: deadline || "",
 			teamSize: teamSize || 3,
 			team: resolvedTeam,
-			tasks: projectTasks,
+			tasks: [], // Start with empty tasks, will add later
 			createdBy: sessionUser._id,
 			members: memberUserIds,
 			status: "active",
 		});
-
-		// Add project to all member users' projects arrays
-		await User.updateMany(
-			{ _id: { $in: memberUserIds } },
-			{ $addToSet: { projects: project._id } }
-		);
-
-		// Also create Task documents for the task controller compatibility
-		const Task = require("../models/Task");
+estimatedHours: task.estimatedHours,
+				dueDate: task.dueDate,
+				
+		// Now create Task documents with the project ID
 		for (const task of projectTasks) {
-			await Task.create({
+			const createdTask = await Task.create({
 				projectId: project._id,
 				title: task.title,
 				description: task.description,
@@ -187,7 +206,27 @@ const createFullProject = async (req, res) => {
 				assignees: task.assignees.map(a => a.name),
 				createdBy: sessionUser._id,
 			});
+			createdTasks.push(createdTask);
 		}
+
+		// Now add tasks to project with matching IDs
+		project.tasks = projectTasks.map((task, index) => ({
+			_id: createdTasks[index]._id, // Use the Task document's ID
+			title: task.title,
+			description: task.description,
+			dueDate: task.dueDate,
+			priority: task.priority,
+			estimatedHours: task.estimatedHours,
+			status: task.status,
+			assignees: task.assignees,
+		}));
+		await project.save();
+
+		// Add project to all member users' projects arrays
+		await User.updateMany(
+			{ _id: { $in: memberUserIds } },
+			{ $addToSet: { projects: project._id } }
+		);
 
 		// --- GitHub integration: create repo, issues, invitations, assignments — all in parallel ---
 		// Use user's token or fallback to env token for testing
@@ -285,8 +324,7 @@ const createFullProject = async (req, res) => {
 				console.log(`[GitHub] Labels: ${successfulLabels}/${labelResults.length} successful`);
 
 				console.log(`[GitHub] Creating issues for ${projectTasks.length} tasks...`);
-				// 3c: Create issues with labels and assign them — all in parallel
-				const allTasks = await Task.find({ projectId: project._id }).lean();
+				// 3c: Create issues with labels, assign them, and create branches — all in parallel
 				const issuePromises = projectTasks.map(async (task, i) => {
 					try {
 						const assigneeNames = task.assignees.map(a => a.name);
@@ -299,23 +337,42 @@ const createFullProject = async (req, res) => {
 							"",
 							`**Priority:** ${task.priority || "Medium"}`,
 							`**Estimated Hours:** ${task.estimatedHours || 0}`,
+							`**Due Date:** ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'Not set'}`,
 							ghAssignees.length ? `**Assignees:** ${ghAssignees.map(u => `@${u}`).join(", ")}` : "",
 						].filter(Boolean).join("\n");
 
 						const labels = [task.priority || "Medium"];
 						const issue = await createIssue(ownerLogin, repoName, task.title, issueBody, token, labels);
 
-						// Assign and update Task doc in parallel
+						// Create branch for this issue
+						const branchName = `issue-${issue.number}-${task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 50)}`;
+						const branchResult = await createBranch(ownerLogin, repoName, branchName, token);
+
+						// Assign, update Task doc, and update Project.tasks in parallel
 						const postIssueOps = [];
 						if (ghAssignees.length > 0) {
 							postIssueOps.push(assignIssue(ownerLogin, repoName, issue.number, ghAssignees, token));
 						}
-						if (allTasks[i]) {
+						if (createdTasks[i]) {
 							postIssueOps.push(
-								Task.findByIdAndUpdate(allTasks[i]._id, {
+								Task.findByIdAndUpdate(createdTasks[i]._id, {
 									githubIssueNumber: issue.number,
 									githubIssueUrl: issue.html_url,
+									githubBranch: branchResult.success ? branchName : null,
 								})
+							);
+							// Also update the project.tasks array subdocument
+							postIssueOps.push(
+								Project.findOneAndUpdate(
+									{ _id: project._id, "tasks._id": createdTasks[i]._id },
+									{ 
+										$set: { 
+											"tasks.$.githubIssueNumber": issue.number,
+											"tasks.$.githubIssueUrl": issue.html_url,
+											"tasks.$.githubBranch": branchResult.success ? branchName : null,
+										}
+									}
+								)
 							);
 						}
 						await Promise.all(postIssueOps);
@@ -323,6 +380,13 @@ const createFullProject = async (req, res) => {
 						console.log(`[GitHub] ✅ Issue #${issue.number}: "${task.title}"`);
 						console.log(`[GitHub]    URL: ${issue.html_url}`);
 						console.log(`[GitHub]    Labels: [${labels.join(", ")}]`);
+						if (branchResult.success) {
+							if (branchResult.alreadyExists) {
+								console.log(`[GitHub]    Branch: ${branchName} (already exists)`);
+							} else {
+								console.log(`[GitHub]    Branch: ${branchName} ✅`);
+							}
+						}
 						if (ghAssignees.length) {
 							console.log(`[GitHub]    Assigned: ${ghAssignees.map(u => `@${u}`).join(", ")}`);
 						}
@@ -339,11 +403,21 @@ const createFullProject = async (req, res) => {
 				const issueResults = await Promise.all(issuePromises);
 				const successfulIssues = issueResults.filter(r => r.success).length;
 				
+				// Step 4: Set up GitHub Actions workflow for Copilot code review
+				console.log(`[GitHub] Setting up Copilot code review workflow...`);
+				const workflowResult = await setupCopilotWorkflow(ownerLogin, repoName, token);
+				if (workflowResult.success) {
+					console.log(`[GitHub] ✅ Copilot workflow created: .github/workflows/copilot-review.yml`);
+				} else {
+					console.error(`[GitHub] ❌ Failed to create workflow:`, workflowResult.error);
+				}
+				
 				console.log(`\n[GitHub Integration] Summary for "${name}":`);
 				console.log(`[GitHub] ✅ Repository: ${ownerLogin}/${repoName}`);
 				console.log(`[GitHub] ✅ Collaborators: ${successfulCollabs}/${collabResults.length}`);
 				console.log(`[GitHub] ✅ Labels: ${successfulLabels}/${labelResults.length}`);
 				console.log(`[GitHub] ✅ Issues: ${successfulIssues}/${projectTasks.length}`);
+				console.log(`[GitHub] ${workflowResult.success ? '✅' : '❌'} Copilot Review: ${workflowResult.success ? 'Enabled' : 'Failed'}`);
 				console.log(`[GitHub Integration] Complete!\n`);
 			} catch (ghErr) {
 				// Don't fail the whole project creation if GitHub integration fails
