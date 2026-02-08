@@ -355,6 +355,68 @@ const createFile = async (owner, repo, path, content, message, token) => {
 };
 
 /**
+ * Create or update a file on GitHub (handles both new and existing files)
+ */
+const createOrUpdateFile = async (owner, repo, path, content, message, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path}`;
+  
+  // Try to get existing file to get its SHA
+  let sha = null;
+  try {
+    const getResponse = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Datathon-2026",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    
+    if (getResponse.ok) {
+      const existingFile = await getResponse.json();
+      sha = existingFile.sha;
+      console.log(`[GitHub] File ${path} exists, will update with SHA: ${sha}`);
+    }
+  } catch (err) {
+    console.log(`[GitHub] File ${path} does not exist, will create new`);
+  }
+  
+  // GitHub API requires base64 encoding
+  const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
+  
+  const body = {
+    message,
+    content: contentBase64,
+  };
+  
+  // Include SHA if file exists (for updates)
+  if (sha) {
+    body.sha = sha;
+  }
+  
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_file_update_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+/**
  * Get pull requests linked to an issue
  */
 const getPullRequestsForIssue = async (owner, repo, issueNumber, token) => {
@@ -414,6 +476,147 @@ const getPullRequestsForIssue = async (owner, repo, issueNumber, token) => {
   } catch (error) {
     console.error('[GitHub] Error fetching PRs for issue:', error.message);
     return { prs: [], error: error.message };
+  }
+};
+
+/**
+ * Get PR inline review comments (code-level comments from reviewers/bots)
+ */
+const getPRReviewComments = async (owner, repo, prNumber, token) => {
+  try {
+    // Get inline review comments (posted on specific lines)
+    const reviewCommentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/comments`;
+    const reviewCommentsRes = await fetch(reviewCommentsUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Datathon-2026",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    
+    const reviewComments = reviewCommentsRes.ok ? await reviewCommentsRes.json() : [];
+    
+    // Get issue-level comments on the PR (general comments, bot comments)
+    const issueCommentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${prNumber}/comments`;
+    const issueCommentsRes = await fetch(issueCommentsUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Datathon-2026",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    
+    const issueComments = issueCommentsRes.ok ? await issueCommentsRes.json() : [];
+    
+    // Categorize comments
+    const codeReviewComments = reviewComments.map(c => ({
+      type: 'inline',
+      author: c.user?.login || 'unknown',
+      authorType: c.user?.type === 'Bot' ? 'bot' : 'human',
+      body: c.body,
+      path: c.path,
+      line: c.line || c.original_line,
+      createdAt: c.created_at,
+      url: c.html_url,
+    }));
+    
+    const generalComments = issueComments
+      .filter(c => {
+        const body = (c.body || '').toLowerCase();
+        // Filter to only code-review-related comments (from bots or containing review keywords)
+        return c.user?.type === 'Bot' || 
+               body.includes('review') || body.includes('code quality') || 
+               body.includes('suggestion') || body.includes('issue') ||
+               body.includes('⚠️') || body.includes('✅') || body.includes('🔍') ||
+               body.includes('bug') || body.includes('security') || body.includes('performance');
+      })
+      .map(c => ({
+        type: 'general',
+        author: c.user?.login || 'unknown',
+        authorType: c.user?.type === 'Bot' ? 'bot' : 'human',
+        body: c.body,
+        createdAt: c.created_at,
+        url: c.html_url,
+      }));
+    
+    return {
+      inlineComments: codeReviewComments,
+      generalComments: generalComments,
+      totalIssues: codeReviewComments.length + generalComments.length,
+      error: null,
+    };
+  } catch (error) {
+    console.error('[GitHub] Error fetching PR review comments:', error.message);
+    return { inlineComments: [], generalComments: [], totalIssues: 0, error: error.message };
+  }
+};
+
+/**
+ * Post a code review comment on a PR (server-side review)
+ */
+const postPRReview = async (owner, repo, prNumber, reviewBody, token) => {
+  try {
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/reviews`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "Datathon-2026",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({
+        event: 'COMMENT',
+        body: reviewBody,
+      }),
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      console.error('[GitHub] Failed to post review:', data);
+      return { success: false, error: data.message };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[GitHub] Error posting PR review:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get diff/patch content for a PR
+ */
+const getPRDiff = async (owner, repo, prNumber, token) => {
+  try {
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/files`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Datathon-2026",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    
+    if (!response.ok) return { files: [], error: `Failed: ${response.status}` };
+    
+    const files = await response.json();
+    return {
+      files: files.map(f => ({
+        filename: f.filename,
+        status: f.status,
+        additions: f.additions,
+        deletions: f.deletions,
+        patch: f.patch || '',
+      })),
+      error: null,
+    };
+  } catch (error) {
+    return { files: [], error: error.message };
   }
 };
 
@@ -926,6 +1129,47 @@ jobs:
               });
             }
 
+      - name: GitHub Copilot Code Review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get list of changed files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number
+            });
+
+            const fileList = files.map(f => \`- \${f.filename} (+\${f.additions}/-\${f.deletions})\`).join('\\n');
+            
+            // Request GitHub Copilot code review
+            const copilotRequest = \`@github-copilot Please review this pull request:
+
+**Changed Files:**
+\${fileList}
+
+**Review Focus:**
+1. **Code Quality:** Assess code clarity, maintainability, and adherence to best practices
+2. **Security:** Identify potential security vulnerabilities or unsafe patterns
+3. **Performance:** Flag potential performance bottlenecks or inefficiencies
+4. **Bugs:** Detect logical errors, edge cases, or potential runtime issues
+5. **Recommendations:** Suggest specific improvements with code examples
+
+Please provide:
+- Specific line references where issues are found
+- Severity level for each finding (Critical, High, Medium, Low)
+- Concrete code suggestions for fixes
+- Explanation of why each issue matters
+
+Thank you!\`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: copilotRequest
+            });
+
       - name: Notify Issue Assignees
         uses: actions/github-script@v7
         with:
@@ -958,12 +1202,12 @@ jobs:
 `;
 
   try {
-    await createFile(
+    await createOrUpdateFile(
       owner,
       repo,
       '.github/workflows/copilot-review.yml',
       workflowContent,
-      'Add GitHub Copilot code review workflow',
+      'Update GitHub Copilot code review workflow',
       token
     );
     return { success: true };
@@ -973,4 +1217,4 @@ jobs:
   }
 };
 
-module.exports = { getTodayCommits, getRecentCommits, fetchGitHubJson, createIssue, checkCollaborator, addCollaborator, assignIssue, getGitHubUser, createRepo, createLabel, createFile, setupCopilotWorkflow, getPullRequestsForIssue, getIssueDetails, getPRReviews, createBranch, getBranchActivity };
+module.exports = { getTodayCommits, getRecentCommits, fetchGitHubJson, createIssue, checkCollaborator, addCollaborator, assignIssue, getGitHubUser, createRepo, createLabel, createFile, createOrUpdateFile, setupCopilotWorkflow, getPullRequestsForIssue, getIssueDetails, getPRReviews, getPRReviewComments, postPRReview, getPRDiff, createBranch, getBranchActivity };

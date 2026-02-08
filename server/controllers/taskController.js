@@ -1,7 +1,7 @@
 const Task = require("../models/Task");
 const Project = require("../models/Project");
 const User = require("../models/UserSchema");
-const { createIssue, checkCollaborator, addCollaborator, assignIssue, getPullRequestsForIssue, getIssueDetails, getPRReviews, getBranchActivity } = require("../services/githubService");
+const { createIssue, checkCollaborator, addCollaborator, assignIssue, getPullRequestsForIssue, getIssueDetails, getPRReviews, getPRReviewComments, postPRReview, getPRDiff, getBranchActivity } = require("../services/githubService");
 const { getWakaTimeStats } = require("../services/wakatime-stats");
 
 const parseCookies = (req) => {
@@ -276,10 +276,17 @@ const getTaskDetails = async (req, res) => {
         },
         codeReviewScore: 0,
         reviews: [],
+        reviewComments: [],  // inline + general code review comments
         branch: null,
       },
       wakatime: {
         assigneeStats: [],
+      },
+      scores: {
+        punctuality: null,
+        codeReview: null,
+        codingTime: null,
+        overall: null,
       },
     };
 
@@ -310,6 +317,14 @@ const getTaskDetails = async (req, res) => {
             task.status = 'done';
             await task.save();
             taskDetails.status = 'done';
+            
+            // Also update in project.tasks array
+            const Project = require('../models/Project');
+            await Project.findOneAndUpdate(
+              { _id: project._id, 'tasks._id': task._id },
+              { $set: { 'tasks.$.status': 'done' } }
+            );
+            console.log(`[Task Details] ✅ Updated both Task document and project.tasks array`);
           }
           taskDetails.github.issueDeleted = true;
         } else if (!issueResult.error) {
@@ -322,6 +337,14 @@ const getTaskDetails = async (req, res) => {
             task.status = 'done';
             await task.save();
             taskDetails.status = 'done';
+            
+            // Also update in project.tasks array
+            const Project = require('../models/Project');
+            await Project.findOneAndUpdate(
+              { _id: project._id, 'tasks._id': task._id },
+              { $set: { 'tasks.$.status': 'done' } }
+            );
+            console.log(`[Task Details] ✅ Updated both Task document and project.tasks array`);
           }
         }
 
@@ -363,6 +386,102 @@ const getTaskDetails = async (req, res) => {
               prTitle: pr.title,
             }))
           );
+
+          // Fetch all PR review comments (inline + general)
+          try {
+            const allReviewComments = await Promise.all(
+              prWithReviews.map(pr => getPRReviewComments(project.owner, project.repo, pr.number, token))
+            );
+            taskDetails.github.reviewComments = allReviewComments.flatMap((result, idx) => {
+              const prNum = prWithReviews[idx].number;
+              const prTitle = prWithReviews[idx].title;
+              return [
+                ...result.inlineComments.map(c => ({ ...c, prNumber: prNum, prTitle })),
+                ...result.generalComments.map(c => ({ ...c, prNumber: prNum, prTitle })),
+              ];
+            });
+            console.log(`[Task Details] ✅ Fetched ${taskDetails.github.reviewComments.length} code review comments`);
+          } catch (rcErr) {
+            console.error('[Task Details] Review comments fetch failed:', rcErr.message);
+          }
+
+          // --- SERVER-SIDE AI CODE REVIEW ---
+          // If PRs exist but no review comments from bots, trigger AI review via Gemini
+          const hasAIReview = taskDetails.github.reviewComments.some(c => c.authorType === 'bot');
+          if (!hasAIReview && prWithReviews.length > 0) {
+            try {
+              const latestPR = prWithReviews[prWithReviews.length - 1];
+              const diffResult = await getPRDiff(project.owner, project.repo, latestPR.number, token);
+              
+              if (diffResult.files.length > 0 && process.env.FEATHERLESS_API_KEY) {
+                const { default: OpenAI } = await import("openai");
+                const client = new OpenAI({
+                  baseURL: process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1",
+                  apiKey: process.env.FEATHERLESS_API_KEY,
+                });
+                
+                // Build a concise diff summary (limit size)
+                const diffSummary = diffResult.files.slice(0, 5).map(f => 
+                  `### ${f.filename} (${f.status}: +${f.additions}/-${f.deletions})\n\`\`\`diff\n${(f.patch || '').substring(0, 800)}\n\`\`\``
+                ).join('\n\n');
+                
+                const issueBody = taskDetails.github.issue?.body || task.description || '';
+                const aiPrompt = `You are a senior code reviewer. Review this PR diff and provide actionable feedback. Be concise.
+
+PR: "${latestPR.title}"
+Issue Title: "${task.title}"
+Issue Description: "${issueBody.substring(0, 600)}"
+
+${diffSummary}
+
+Return ONLY a JSON object:
+{
+  "issues": [{"severity": "critical|high|medium|low", "file": "filename", "line": number_or_null, "message": "description", "suggestion": "fix suggestion"}],
+  "suggestedChanges": [{"file": "filename", "description": "what should be changed and why", "priority": "high|medium|low"}],
+  "issueAddressal": {"addressed": true_or_false, "confidence": number_0_to_100, "reasoning": "1-2 sentences explaining whether the PR adequately addresses the issue requirements", "missingItems": ["list of issue requirements not addressed, if any"]},
+  "summary": "1-2 sentence overall assessment",
+  "qualityScore": number_0_to_100
+}`;
+
+                const completion = await client.chat.completions.create({
+                  model: process.env.FEATHERLESS_MODEL || "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+                  max_tokens: 1000,
+                  messages: [
+                    { role: "system", content: "You are a code review expert. Return valid JSON only." },
+                    { role: "user", content: aiPrompt }
+                  ],
+                });
+                
+                let aiReviewText = completion.choices[0]?.message?.content || '';
+                // Strip <think>...</think> blocks if present
+                aiReviewText = aiReviewText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                // Extract JSON from response
+                const jsonMatch = aiReviewText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  const aiReview = JSON.parse(jsonMatch[0]);
+                  taskDetails.github.aiReview = aiReview;
+                  
+                  // Post review comment on GitHub PR
+                  const addressalSection = aiReview.issueAddressal 
+                    ? `\n\n### Issue Addressal: ${aiReview.issueAddressal.addressed ? '✅ Addressed' : '❌ Not Fully Addressed'} (${aiReview.issueAddressal.confidence}% confidence)\n${aiReview.issueAddressal.reasoning}${aiReview.issueAddressal.missingItems?.length > 0 ? '\n\n**Missing:**\n' + aiReview.issueAddressal.missingItems.map(m => `- ${m}`).join('\n') : ''}`
+                    : '';
+                  const suggestedSection = aiReview.suggestedChanges?.length > 0
+                    ? `\n\n### Suggested Changes:\n` + aiReview.suggestedChanges.map(s => `- **[${s.priority.toUpperCase()}]** \`${s.file}\`: ${s.description}`).join('\n')
+                    : '';
+                  const reviewBody = `## 🤖 AI Code Review\n\n${aiReview.summary}\n\n**Quality Score: ${aiReview.qualityScore}/100**${addressalSection}\n\n${
+                    aiReview.issues?.length > 0 
+                      ? '### Issues Found:\n' + aiReview.issues.map(i => `- **${i.severity.toUpperCase()}** ${i.file}${i.line ? `:${i.line}` : ''}: ${i.message}${i.suggestion ? `\n  > 💡 ${i.suggestion}` : ''}`).join('\n')
+                      : '✅ No significant issues found.'
+                  }${suggestedSection}`;
+                  
+                  await postPRReview(project.owner, project.repo, latestPR.number, reviewBody, token);
+                  console.log(`[Task Details] ✅ AI code review posted on PR #${latestPR.number}`);
+                }
+              }
+            } catch (aiErr) {
+              console.error('[Task Details] AI code review failed:', aiErr.message);
+            }
+          }
 
           // Auto-update task status if PR is merged OR issue is closed
           const hasMergedPR = prWithReviews.some(pr => pr.merged);
@@ -467,6 +586,108 @@ const getTaskDetails = async (req, res) => {
         taskDetails.wakatime.error = wtErr.message;
       }
     }
+
+    // ========== SCORING SYSTEM ==========
+    
+    // 1. PUNCTUALITY SCORE (100% till deadline, quadratic decrease after)
+    if (task.dueDate) {
+      const now = new Date();
+      const due = new Date(task.dueDate);
+      const created = new Date(task.createdAt);
+      const totalDuration = due - created; // total time allowed in ms
+      
+      if (now <= due) {
+        // Before or at deadline: 100%
+        taskDetails.scores.punctuality = 100;
+      } else {
+        // After deadline: quadratic decrease
+        // Score = 100 * (1 - (overdue/totalDuration)^2)
+        const overdueMs = now - due;
+        const ratio = overdueMs / Math.max(totalDuration, 1);
+        taskDetails.scores.punctuality = Math.max(0, Math.round(100 * (1 - Math.pow(ratio, 2))));
+      }
+      
+      // If task is done, calculate based on when it was completed
+      if (taskDetails.status === 'done' && task.updatedAt) {
+        const completedAt = new Date(task.updatedAt);
+        if (completedAt <= due) {
+          taskDetails.scores.punctuality = 100;
+        } else {
+          const overdueMs = completedAt - due;
+          const ratio = overdueMs / Math.max(totalDuration, 1);
+          taskDetails.scores.punctuality = Math.max(0, Math.round(100 * (1 - Math.pow(ratio, 2))));
+        }
+      }
+    }
+    
+    // 2. CODE REVIEW SCORE (fewer issues = higher score)
+    const reviewComments = taskDetails.github.reviewComments || [];
+    const aiReview = taskDetails.github.aiReview;
+    
+    if (taskDetails.github.connected && taskDetails.github.prs.length > 0) {
+      let codeReviewScore = 100;
+      
+      // Deduct for inline review comments (code issues found)
+      const issueCount = reviewComments.filter(c => c.type === 'inline').length;
+      codeReviewScore -= issueCount * 8; // -8 per inline issue
+      
+      // Deduct for review states
+      const changesRequested = taskDetails.github.reviews.filter(r => r.state === 'CHANGES_REQUESTED').length;
+      codeReviewScore -= changesRequested * 15; // -15 per changes requested
+      
+      // Use AI review score if available
+      if (aiReview?.qualityScore != null) {
+        // Blend: 60% AI score, 40% comment-based score
+        codeReviewScore = Math.round(aiReview.qualityScore * 0.6 + Math.max(0, codeReviewScore) * 0.4);
+      }
+      
+      // Bonus for approvals
+      const approvals = taskDetails.github.reviews.filter(r => r.state === 'APPROVED').length;
+      codeReviewScore += approvals * 5;
+      
+      taskDetails.scores.codeReview = Math.max(0, Math.min(100, codeReviewScore));
+    }
+    
+    // 3. CODING TIME SCORE (proportional to estimated hours)
+    const estimatedHours = task.estimatedHours || 0;
+    const wakatimeStats = taskDetails.wakatime?.assigneeStats || [];
+    const totalCodingHours = wakatimeStats.reduce((sum, s) => sum + (s.totalHours || 0), 0);
+    
+    if (estimatedHours > 0 && totalCodingHours > 0) {
+      // Ideal: actual time is close to estimated time
+      // Score decreases if too fast (not enough effort) or way too slow
+      const ratio = totalCodingHours / estimatedHours;
+      
+      if (ratio >= 0.3 && ratio <= 1.5) {
+        // Sweet spot: 30% to 150% of estimated time
+        taskDetails.scores.codingTime = 100;
+      } else if (ratio < 0.3) {
+        // Too fast - might be low effort (proportional decrease)
+        taskDetails.scores.codingTime = Math.round((ratio / 0.3) * 100);
+      } else {
+        // Too slow - diminishing returns after 1.5x
+        const excessRatio = (ratio - 1.5) / 1.5;
+        taskDetails.scores.codingTime = Math.max(0, Math.round(100 * (1 - Math.pow(excessRatio, 2))));
+      }
+    } else if (totalCodingHours > 0) {
+      // No estimate but has coding time - give benefit of doubt
+      taskDetails.scores.codingTime = 80;
+    }
+    
+    // OVERALL SCORE (weighted average)
+    const scoreComponents = [];
+    if (taskDetails.scores.punctuality != null) scoreComponents.push({ score: taskDetails.scores.punctuality, weight: 0.35 });
+    if (taskDetails.scores.codeReview != null) scoreComponents.push({ score: taskDetails.scores.codeReview, weight: 0.40 });
+    if (taskDetails.scores.codingTime != null) scoreComponents.push({ score: taskDetails.scores.codingTime, weight: 0.25 });
+    
+    if (scoreComponents.length > 0) {
+      const totalWeight = scoreComponents.reduce((sum, c) => sum + c.weight, 0);
+      taskDetails.scores.overall = Math.round(
+        scoreComponents.reduce((sum, c) => sum + (c.score * c.weight), 0) / totalWeight
+      );
+    }
+    
+    console.log(`[Task Details] 📊 Scores - Punctuality: ${taskDetails.scores.punctuality ?? '—'}, Code Review: ${taskDetails.scores.codeReview ?? '—'}, Coding Time: ${taskDetails.scores.codingTime ?? '—'}, Overall: ${taskDetails.scores.overall ?? '—'}`);
 
     return res.status(200).json({ ok: true, task: taskDetails });
   } catch (error) {
