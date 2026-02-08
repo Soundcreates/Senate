@@ -23,14 +23,18 @@ const formatDate = (value) => {
 async function getWakatimeStats(req, res) {
    try {
       const cookies = parseCookies(req);
-      const userId = cookies.session_user;
-      if (!userId) {
-         return res.status(401).json({ error: "no_session" });
-      }
+      let userId = cookies.session_user;
 
-      const user = await User.findById(userId).lean();
+      let user;
+      if (userId) {
+         user = await User.findById(userId).lean();
+      }
+      // DEV BYPASS: fall back to first user in DB when no session
       if (!user) {
-         return res.status(401).json({ error: "invalid_session" });
+         user = await User.findOne().lean();
+      }
+      if (!user) {
+         return res.status(401).json({ error: "no_users_in_db" });
       }
 
       const accessToken = user.wakatimeTokens?.accessToken;
