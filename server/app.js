@@ -17,6 +17,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+console.log("MONGO URI:", process.env.MONGO_URI);
+
 
 app.get("/health", (_req, res) => {
 	res.status(200).json({ status: "ok" });
