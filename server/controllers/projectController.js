@@ -2,7 +2,7 @@ const Project = require("../models/Project");
 const ProjectDailyStats = require("../models/ProjectDailyStats");
 const User = require("../models/UserSchema");
 const { getTodayCommits } = require("../services/githubService");
-const { createIssue, checkCollaborator, addCollaborator, assignIssue } = require("../services/githubService");
+const { createIssue, checkCollaborator, addCollaborator, assignIssue, createRepo, createLabel } = require("../services/githubService");
 const { storeTodayStats } = require("../services/projectStatsService");
 
 const parseCookies = (req) => {
@@ -44,25 +44,7 @@ const createProject = async (req, res) => {
 			return res.status(400).json({ error: "project_name_missing" });
 		}
 
-		const githubResponse = await fetch("https://api.github.com/user/repos", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/vnd.github+json",
-				"Content-Type": "application/json",
-				"User-Agent": "Datathon-2026",
-			},
-			body: JSON.stringify({
-				name: projectName,
-				private: true,
-				auto_init: true,
-			}),
-		});
-
-		const repoData = await githubResponse.json();
-		if (!githubResponse.ok) {
-			return res.status(502).json({ error: "github_repo_create_failed", details: repoData });
-		}
+		const repoData = await createRepo(projectName, req.body?.description || "", token);
 
 		const ownerLogin = repoData.owner?.login || "";
 		const project = await Project.create({
@@ -193,11 +175,21 @@ const createFullProject = async (req, res) => {
 			});
 		}
 
-		// --- GitHub integration: create issues, ensure collaborators, assign ---
+		// --- GitHub integration: create repo, issues, invitations, assignments — all in parallel ---
 		const token = sessionUser.githubTokens?.accessToken;
-		if (token && project.owner && project.repo) {
+		if (token) {
 			try {
-				// Resolve GitHub usernames for all team members
+				// Step 1: Create the GitHub repo
+				const repoData = await createRepo(name, description, token);
+				const ownerLogin = repoData.owner?.login || "";
+				const repoName = repoData.name || name;
+
+				// Update the project with repo info
+				project.owner = ownerLogin;
+				project.repo = repoName;
+				await project.save();
+
+				// Step 2: Resolve GitHub usernames for all team members
 				const githubUsernameMap = {}; // name -> githubUsername
 				for (const member of resolvedTeam) {
 					if (member.userId) {
@@ -208,23 +200,43 @@ const createFullProject = async (req, res) => {
 					}
 				}
 
-				// Ensure all resolved GitHub users are collaborators on the repo
-				for (const [memberName, ghUsername] of Object.entries(githubUsernameMap)) {
+				// Step 3: Run collaborator invitations, label creation, and issue creation ALL in parallel
+				const priorityLabelColors = {
+					High: "d73a4a",
+					Medium: "fbca04",
+					Low: "0e8a16",
+					Critical: "b60205",
+				};
+
+				// 3a: Invite all collaborators in parallel
+				const collabPromises = Object.entries(githubUsernameMap).map(async ([memberName, ghUsername]) => {
 					try {
-						const isCollab = await checkCollaborator(project.owner, project.repo, ghUsername, token);
+						const isCollab = await checkCollaborator(ownerLogin, repoName, ghUsername, token);
 						if (!isCollab) {
-							const result = await addCollaborator(project.owner, project.repo, ghUsername, token);
-							console.log(`[GitHub] Collaborator ${result.status}: ${ghUsername} on ${project.owner}/${project.repo}`);
+							const result = await addCollaborator(ownerLogin, repoName, ghUsername, token);
+							console.log(`[GitHub] Collaborator ${result.status}: ${ghUsername} on ${ownerLogin}/${repoName}`);
 						}
 					} catch (collabErr) {
 						console.warn(`[GitHub] Failed to add collaborator ${ghUsername}:`, collabErr.message);
 					}
-				}
+				});
 
-				// Create a GitHub issue for each task and assign developers
+				// 3b: Create priority labels in parallel
+				const uniquePriorities = [...new Set(projectTasks.map(t => t.priority || "Medium"))];
+				const labelPromises = uniquePriorities.map(async (priority) => {
+					try {
+						await createLabel(ownerLogin, repoName, priority, priorityLabelColors[priority] || "ededed", token);
+					} catch (labelErr) {
+						console.warn(`[GitHub] Failed to create label "${priority}":`, labelErr.message);
+					}
+				});
+
+				// Wait for collaborators and labels to be ready (issues need labels to exist)
+				await Promise.all([...collabPromises, ...labelPromises]);
+
+				// 3c: Create issues with labels and assign them — all in parallel
 				const allTasks = await Task.find({ projectId: project._id }).lean();
-				for (let i = 0; i < projectTasks.length; i++) {
-					const task = projectTasks[i];
+				const issuePromises = projectTasks.map(async (task, i) => {
 					try {
 						const assigneeNames = task.assignees.map(a => a.name);
 						const ghAssignees = assigneeNames
@@ -239,26 +251,31 @@ const createFullProject = async (req, res) => {
 							ghAssignees.length ? `**Assignees:** ${ghAssignees.map(u => `@${u}`).join(", ")}` : "",
 						].filter(Boolean).join("\n");
 
-						const issue = await createIssue(project.owner, project.repo, task.title, issueBody, token);
+						const labels = [task.priority || "Medium"];
+						const issue = await createIssue(ownerLogin, repoName, task.title, issueBody, token, labels);
 
-						// Assign the issue to the developers' GitHub accounts
+						// Assign and update Task doc in parallel
+						const postIssueOps = [];
 						if (ghAssignees.length > 0) {
-							await assignIssue(project.owner, project.repo, issue.number, ghAssignees, token);
+							postIssueOps.push(assignIssue(ownerLogin, repoName, issue.number, ghAssignees, token));
 						}
-
-						// Update the Task doc with the GitHub issue number
 						if (allTasks[i]) {
-							await Task.findByIdAndUpdate(allTasks[i]._id, {
-								githubIssueNumber: issue.number,
-								githubIssueUrl: issue.html_url,
-							});
+							postIssueOps.push(
+								Task.findByIdAndUpdate(allTasks[i]._id, {
+									githubIssueNumber: issue.number,
+									githubIssueUrl: issue.html_url,
+								})
+							);
 						}
+						await Promise.all(postIssueOps);
 
-						console.log(`[GitHub] Issue #${issue.number} created for task "${task.title}" → assigned to [${ghAssignees.join(", ")}]`);
+						console.log(`[GitHub] Issue #${issue.number} "${task.title}" → labels: [${labels}], assigned: [${ghAssignees.join(", ")}]`);
 					} catch (issueErr) {
 						console.warn(`[GitHub] Failed to create issue for task "${task.title}":`, issueErr.message);
 					}
-				}
+				});
+
+				await Promise.all(issuePromises);
 			} catch (ghErr) {
 				// Don't fail the whole project creation if GitHub integration fails
 				console.error("[GitHub] Integration error (non-blocking):", ghErr.message);

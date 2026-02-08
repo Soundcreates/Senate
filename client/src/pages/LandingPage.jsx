@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, useInView, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import {
   Brain, Shield, Zap, BarChart3, Users, ArrowRight, ChevronDown,
@@ -182,6 +183,7 @@ function FAQItem({ question, answer }) {
 /* ─── Navigation ─── */
 // ─── NAVIGATON (ORIGIN STYLE: FLOATING PILL) ───
 function Navigation() {
+  const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -258,6 +260,7 @@ function Navigation() {
           cursor: 'pointer',
           transition: 'transform 0.2s ease, background 0.2s'
         }}
+          onClick={() => navigate('/login')}
           onMouseEnter={(e) => { e.target.style.transform = 'scale(1.05)'; e.target.style.background = '#bda692' }}
           onMouseLeave={(e) => { e.target.style.transform = 'scale(1)'; e.target.style.background = '#a9927d' }}
         >
@@ -275,6 +278,7 @@ function Navigation() {
 
 // ─── HERO (ORIGIN STYLE: CINEMATIC CENTERED) ───
 function Hero({ onPlayDemo }) {
+  const navigate = useNavigate()
   const fadeUp = {
     hidden: { opacity: 0, y: 30 },
     visible: (i = 0) => ({
@@ -337,6 +341,7 @@ function Hero({ onPlayDemo }) {
             cursor: 'pointer',
             transition: 'all 0.3s ease'
           }}
+            onClick={() => navigate('/login')}
             onMouseEnter={(e) => { e.target.style.transform = 'scale(1.05)'; e.target.style.boxShadow = '0 0 30px rgba(169, 146, 125, 0.3)' }}
             onMouseLeave={(e) => { e.target.style.transform = 'scale(1)'; e.target.style.boxShadow = 'none' }}
           >

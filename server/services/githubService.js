@@ -136,10 +136,10 @@ const getGitHubUser = async (token) => {
 };
 
 /**
- * Create a GitHub issue on a repo.
+ * Create a GitHub issue on a repo with optional labels.
  * Returns the created issue object (with .number, .html_url, etc.)
  */
-const createIssue = async (owner, repo, title, body, token) => {
+const createIssue = async (owner, repo, title, body, token, labels = []) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`;
   const response = await fetch(url, {
     method: "POST",
@@ -150,7 +150,7 @@ const createIssue = async (owner, repo, title, body, token) => {
       "User-Agent": "Datathon-2026",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-    body: JSON.stringify({ title, body: body || "" }),
+    body: JSON.stringify({ title, body: body || "", labels }),
   });
 
   const data = await response.json();
@@ -238,4 +238,66 @@ const assignIssue = async (owner, repo, issueNumber, assignees, token) => {
   return data;
 };
 
-module.exports = { getTodayCommits, getRecentCommits, fetchGitHubJson, createIssue, checkCollaborator, addCollaborator, assignIssue, getGitHubUser };
+/**
+ * Create a private GitHub repo with auto_init.
+ * Returns the GitHub repo data.
+ */
+const createRepo = async (name, description, token) => {
+  const response = await fetch("https://api.github.com/user/repos", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      name,
+      description: description || "",
+      private: true,
+      auto_init: true,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_repo_create_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+/**
+ * Create a label on a repo. If the label already exists, that's fine.
+ * color is a hex string without the '#' (e.g. "e4e669").
+ */
+const createLabel = async (owner, repo, name, color, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/labels`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ name, color: color || "ededed" }),
+  });
+
+  // 422 means label already exists — that's fine
+  if (response.status === 422) return { name, already_exists: true };
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_label_create_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+module.exports = { getTodayCommits, getRecentCommits, fetchGitHubJson, createIssue, checkCollaborator, addCollaborator, assignIssue, getGitHubUser, createRepo, createLabel };

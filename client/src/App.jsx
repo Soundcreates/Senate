@@ -28,15 +28,16 @@ function App() {
       // lenis.destroy()
     }
   }, [])
- return (
+  return (
     <AuthProvider>
       <WalletProvider>
         <Router>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/register" element={<Register />} />
-            <Route path = "/login" element = {<Login />} />
-            <Route  path="/admin" element={<Admin />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/admin-dashboard" element={<AdminDashboard />} />
             <Route path="/dashboard" element={<UserDashboard />} />
             <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/user" element={<UserDashboard />} />
