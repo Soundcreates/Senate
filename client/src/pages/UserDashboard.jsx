@@ -237,9 +237,20 @@ const UserDashboard = () => {
             };
         });
     }, [projects, projectTasks, recentCommits, totalHours, user?.role]);
+    
+    // Loading state while user data is being fetched
+    if (!user) {
+        return (
+            <div style={{ minHeight: '100vh', background: '#fbf7ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Loader2 size={32} className="animate-spin" style={{ color: '#a9927d' }} />
+            </div>
+        );
+    }
+    
     if(user.role === "admin"){
         return <AdminDashboard />
-    }else{
+    }
+    
     return (
         <div style={{ minHeight: '100vh', background: '#fbf7ef', fontFamily: "'Jost', sans-serif" }}>
             <style>{`
@@ -602,7 +613,6 @@ const UserDashboard = () => {
             </div>
         </div>
     );
-};
 };
 
 export default UserDashboard;

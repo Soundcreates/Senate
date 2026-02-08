@@ -44,7 +44,11 @@ const createProject = async (req, res) => {
 			return res.status(400).json({ error: "project_name_missing" });
 		}
 
+		console.log(`\n[Simple Project] Creating project "${projectName}"...`);
+		console.log(`[GitHub] Creating repository...`);
 		const repoData = await createRepo(projectName, req.body?.description || "", token);
+		console.log(`[GitHub] ✅ Repository created: ${repoData.owner?.login}/${repoData.name}`);
+		console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
 		const ownerLogin = repoData.owner?.login || "";
 		const project = await Project.create({
@@ -58,13 +62,15 @@ const createProject = async (req, res) => {
 		// Add project to admin user's projects array
 		await User.findByIdAndUpdate(sessionUser._id, { $addToSet: { projects: project._id } });
 
+		console.log(`[Project] ✅ Created project "${projectName}" (${ownerLogin}/${repoData.name})\n`);
 		return res.status(201).json({ ok: true, project });
 	} catch (error) {
-		console.error("Project create failed:", {
-			message: error.message,
-			code: error.code,
-		});
-		return res.status(500).json({ error: "project_create_failed" });
+		console.error("\n[Project] ❌ Creation failed:", error.message);
+		if (error.details) {
+			console.error("[Project]    Details:", JSON.stringify(error.details, null, 2));
+		}
+		console.error("[Project]    Stack:", error.stack);
+		return res.status(500).json({ error: "project_create_failed", details: error.message });
 	}
 };
 
@@ -178,11 +184,15 @@ const createFullProject = async (req, res) => {
 		// --- GitHub integration: create repo, issues, invitations, assignments — all in parallel ---
 		const token = sessionUser.githubTokens?.accessToken;
 		if (token) {
+			console.log(`\n[GitHub Integration] Starting for project "${name}"...`);
 			try {
 				// Step 1: Create the GitHub repo
+				console.log(`[GitHub] Creating repository "${name}"...`);
 				const repoData = await createRepo(name, description, token);
 				const ownerLogin = repoData.owner?.login || "";
 				const repoName = repoData.name || name;
+				console.log(`[GitHub] ✅ Repository created: ${ownerLogin}/${repoName}`);
+				console.log(`[GitHub]    URL: ${repoData.html_url}`);
 
 				// Update the project with repo info
 				project.owner = ownerLogin;
@@ -190,12 +200,14 @@ const createFullProject = async (req, res) => {
 				await project.save();
 
 				// Step 2: Resolve GitHub usernames for all team members
+				console.log(`[GitHub] Resolving team member GitHub accounts...`);
 				const githubUsernameMap = {}; // name -> githubUsername
 				for (const member of resolvedTeam) {
 					if (member.userId) {
 						const memberUser = await User.findById(member.userId);
 						if (memberUser?.githubUsername) {
 							githubUsernameMap[member.name] = memberUser.githubUsername;
+							console.log(`[GitHub]    ${member.name} → @${memberUser.githubUsername}`);
 						}
 					}
 				}
@@ -208,32 +220,55 @@ const createFullProject = async (req, res) => {
 					Critical: "b60205",
 				};
 
+				console.log(`[GitHub] Adding collaborators...`);
 				// 3a: Invite all collaborators in parallel
 				const collabPromises = Object.entries(githubUsernameMap).map(async ([memberName, ghUsername]) => {
 					try {
 						const isCollab = await checkCollaborator(ownerLogin, repoName, ghUsername, token);
 						if (!isCollab) {
 							const result = await addCollaborator(ownerLogin, repoName, ghUsername, token);
-							console.log(`[GitHub] Collaborator ${result.status}: ${ghUsername} on ${ownerLogin}/${repoName}`);
+							console.log(`[GitHub] ✅ Collaborator ${result.status}: @${ghUsername} (${memberName})`);
+							return { success: true, username: ghUsername, status: result.status };
+						} else {
+							console.log(`[GitHub] ℹ️  Already collaborator: @${ghUsername} (${memberName})`);
+							return { success: true, username: ghUsername, status: 'already_collaborator' };
 						}
 					} catch (collabErr) {
-						console.warn(`[GitHub] Failed to add collaborator ${ghUsername}:`, collabErr.message);
+						console.error(`[GitHub] ❌ Failed to add collaborator @${ghUsername}:`, collabErr.message);
+						return { success: false, username: ghUsername, error: collabErr.message };
 					}
 				});
 
+				console.log(`[GitHub] Creating labels...`);
 				// 3b: Create priority labels in parallel
 				const uniquePriorities = [...new Set(projectTasks.map(t => t.priority || "Medium"))];
 				const labelPromises = uniquePriorities.map(async (priority) => {
 					try {
-						await createLabel(ownerLogin, repoName, priority, priorityLabelColors[priority] || "ededed", token);
+						const result = await createLabel(ownerLogin, repoName, priority, priorityLabelColors[priority] || "ededed", token);
+						if (result.already_exists) {
+							console.log(`[GitHub] ℹ️  Label already exists: "${priority}"`);
+						} else {
+							console.log(`[GitHub] ✅ Label created: "${priority}" (#${priorityLabelColors[priority]})`);
+						}
+						return { success: true, label: priority };
 					} catch (labelErr) {
-						console.warn(`[GitHub] Failed to create label "${priority}":`, labelErr.message);
+						console.error(`[GitHub] ❌ Failed to create label "${priority}":`, labelErr.message);
+						return { success: false, label: priority, error: labelErr.message };
 					}
 				});
 
 				// Wait for collaborators and labels to be ready (issues need labels to exist)
-				await Promise.all([...collabPromises, ...labelPromises]);
+				const [collabResults, labelResults] = await Promise.all([
+					Promise.all(collabPromises),
+					Promise.all(labelPromises)
+				]);
+				
+				const successfulCollabs = collabResults.filter(r => r.success).length;
+				const successfulLabels = labelResults.filter(r => r.success).length;
+				console.log(`[GitHub] Collaborators: ${successfulCollabs}/${collabResults.length} successful`);
+				console.log(`[GitHub] Labels: ${successfulLabels}/${labelResults.length} successful`);
 
+				console.log(`[GitHub] Creating issues for ${projectTasks.length} tasks...`);
 				// 3c: Create issues with labels and assign them — all in parallel
 				const allTasks = await Task.find({ projectId: project._id }).lean();
 				const issuePromises = projectTasks.map(async (task, i) => {
@@ -269,17 +304,41 @@ const createFullProject = async (req, res) => {
 						}
 						await Promise.all(postIssueOps);
 
-						console.log(`[GitHub] Issue #${issue.number} "${task.title}" → labels: [${labels}], assigned: [${ghAssignees.join(", ")}]`);
+						console.log(`[GitHub] ✅ Issue #${issue.number}: "${task.title}"`);
+						console.log(`[GitHub]    URL: ${issue.html_url}`);
+						console.log(`[GitHub]    Labels: [${labels.join(", ")}]`);
+						if (ghAssignees.length) {
+							console.log(`[GitHub]    Assigned: ${ghAssignees.map(u => `@${u}`).join(", ")}`);
+						}
+						return { success: true, issue: issue.number, title: task.title };
 					} catch (issueErr) {
-						console.warn(`[GitHub] Failed to create issue for task "${task.title}":`, issueErr.message);
+						console.error(`[GitHub] ❌ Failed to create issue "${task.title}":`, issueErr.message);
+						if (issueErr.details) {
+							console.error(`[GitHub]    Details:`, JSON.stringify(issueErr.details, null, 2));
+						}
+						return { success: false, title: task.title, error: issueErr.message };
 					}
 				});
 
-				await Promise.all(issuePromises);
+				const issueResults = await Promise.all(issuePromises);
+				const successfulIssues = issueResults.filter(r => r.success).length;
+				
+				console.log(`\n[GitHub Integration] Summary for "${name}":`);
+				console.log(`[GitHub] ✅ Repository: ${ownerLogin}/${repoName}`);
+				console.log(`[GitHub] ✅ Collaborators: ${successfulCollabs}/${collabResults.length}`);
+				console.log(`[GitHub] ✅ Labels: ${successfulLabels}/${labelResults.length}`);
+				console.log(`[GitHub] ✅ Issues: ${successfulIssues}/${projectTasks.length}`);
+				console.log(`[GitHub Integration] Complete!\n`);
 			} catch (ghErr) {
 				// Don't fail the whole project creation if GitHub integration fails
-				console.error("[GitHub] Integration error (non-blocking):", ghErr.message);
+				console.error("\n[GitHub Integration] ❌ FATAL ERROR:", ghErr.message);
+				if (ghErr.details) {
+					console.error("[GitHub]    Details:", JSON.stringify(ghErr.details, null, 2));
+				}
+				console.error("[GitHub]    Stack:", ghErr.stack);
 			}
+		} else {
+			console.warn(`[GitHub Integration] ⚠️  Skipped: No GitHub token found for user ${sessionUser.name || sessionUser.email}`);
 		}
 
 		console.log(`[Project] ✅ Created full project "${name}" with ${resolvedTeam.length} members and ${projectTasks.length} tasks`);

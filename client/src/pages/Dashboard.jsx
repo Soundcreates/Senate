@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
-import { MoreHorizontal, Plus, Clock } from 'lucide-react';
+import { MoreHorizontal, Plus, Clock, ExternalLink, Github } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import AdminDashboard from './AdminDashboard';
 import { useNavigate } from 'react-router-dom';
@@ -319,7 +319,22 @@ const Dashboard = () => {
                       <MoreHorizontal size={16} />
                     </button>
                   </div>
-                  <h4 className="font-medium text-white mb-1 group-hover:text-indigo-400 transition-colors">{task.title}</h4>
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-medium text-white group-hover:text-indigo-400 transition-colors">{task.title}</h4>
+                    {task.githubIssueUrl && (
+                      <a
+                        href={task.githubIssueUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+                        title={`GitHub Issue #${task.githubIssueNumber || ''}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Github size={14} />
+                        <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
                   {task.description && (
                     <p className="text-xs text-zinc-500 mb-3 line-clamp-2">{task.description}</p>
                   )}
