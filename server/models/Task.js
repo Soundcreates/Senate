@@ -10,6 +10,9 @@ const TaskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     githubIssueNumber: { type: Number, default: null },
     githubIssueUrl: { type: String, default: null },
+    githubBranch: { type: String, default: null },
+    dueDate: { type: Date, default: null },
+    estimatedHours: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
     ArrowLeft, Clock, Circle, Calendar,
     CheckCircle2, User, TrendingUp, Loader2, DollarSign,
-    Shield, AlertTriangle, ExternalLink, Wallet
+    Shield, AlertTriangle, ExternalLink, Wallet, Github
 } from 'lucide-react';
 import { getProject } from '../Apis/projectApis';
 import { getEscrowData, MilestoneStatusLabels, MilestoneStatusColors } from '../Apis/escrowApi';
@@ -12,6 +12,7 @@ import { useWalletContext } from '../context/WalletContext';
 import DisputePanel from '../components/DisputePanel';
 import DeployEscrowModal from '../components/DeployEscrowModal';
 import { useAuth } from '../context/AuthContext';
+import TaskDetailModal from '../components/TaskDetailModal';
 
 /* ---- helpers ---- */
 const getStatusColor = (status) => {
@@ -46,6 +47,9 @@ const ProjectDetail = () => {
     const [showDeployModal, setShowDeployModal] = useState(false);
     const { isConnected, shortenAddress: shorten, getExplorerUrl } = useWalletContext();
     const { user } = useAuth();
+
+    // Task detail modal state
+    const [selectedTask, setSelectedTask] = useState(null);
 
     useEffect(() => {
         let mounted = true;
@@ -129,6 +133,19 @@ const ProjectDetail = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: '28px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{project.name}</h1>
                                 <span style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '20px', background: projectStatus.bg, color: projectStatus.text, fontWeight: '500' }}>{project.status}</span>
+                                {project.owner && project.repo && (
+                                    <a
+                                        href={`https://github.com/${project.owner}/${project.repo}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#5e503f', textDecoration: 'none', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(169, 146, 125, 0.2)', background: 'white', transition: 'all 0.2s' }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(169, 146, 125, 0.5)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(169, 146, 125, 0.2)'; }}
+                                    >
+                                        <Github size={14} />
+                                        {project.owner}/{project.repo}
+                                    </a>
+                                )}
                             </div>
                             <p style={{ fontSize: '14px', color: '#5e503f', margin: '8px 0 0', maxWidth: '600px' }}>{project.description}</p>
                         </div>
@@ -219,7 +236,20 @@ const ProjectDetail = () => {
                                     const tStatus = statusLabel(task.status);
                                     const tColor = getStatusColor(task.status);
                                     return (
-                                        <div key={task._id || i} style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', borderBottom: i < project.tasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none' }}>
+                                        <div 
+                                            key={task._id || i} 
+                                            onClick={() => setSelectedTask(task)}
+                                            style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                padding: '12px 20px', 
+                                                borderBottom: i < project.tasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none',
+                                                cursor: 'pointer',
+                                                transition: 'background 0.2s'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(169, 146, 125, 0.05)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                        >
                                             {task.status === 'done' ? <CheckCircle2 size={16} style={{ color: '#16a34a', marginRight: '12px' }} /> : <Circle size={16} style={{ color: '#a9927d', marginRight: '12px' }} />}
                                             <div style={{ flex: 1 }}>
                                                 <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{task.title}</p>
@@ -405,6 +435,15 @@ const ProjectDetail = () => {
                     getEscrowData(addr).then(data => setEscrow(data)).catch(() => {});
                 }}
             />
+
+            {/* Task Detail Modal */}
+            {selectedTask && (
+                <TaskDetailModal
+                    task={selectedTask}
+                    projectId={project._id}
+                    onClose={() => setSelectedTask(null)}
+                />
+            )}
         </div>
     );
 };
