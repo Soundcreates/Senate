@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer, Shield, Code2, FileCode, ChevronDown, ChevronUp, Target } from 'lucide-react';
+import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer, Shield, Code2, FileCode, ChevronDown, ChevronUp, Target, DollarSign, Wallet } from 'lucide-react';
+import { getTaskPayments } from '../Apis/paymentApi';
 
 /* ─── Theme Tokens ─── */
 const C = {
@@ -65,6 +66,7 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
   const [error, setError] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [expandedSections, setExpandedSections] = useState({ reviews: true, commits: false, aiReview: true });
+  const [payments, setPayments] = useState([]);
   const toggle = (k) => setExpandedSections(p => ({ ...p, [k]: !p[k] }));
 
   useEffect(() => {
@@ -94,6 +96,21 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
     };
     if (task && projectId) fetchTaskDetails();
   }, [task, projectId]);
+
+  // Fetch payments for this task
+  useEffect(() => {
+    const fetchPayments = async () => {
+      try {
+        if (task?._id) {
+          const data = await getTaskPayments(task._id);
+          setPayments(data.payments || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch payments:', err);
+      }
+    };
+    fetchPayments();
+  }, [task?._id]);
 
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : 'N/A';
   const fmtRel = (d) => { if (!d) return ''; const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); return h < 24 ? `${h}h ago` : `${Math.floor(h/24)}d ago`; };
@@ -543,6 +560,98 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
                   </div>
                 </div>
               </div>
+
+              {/* ═══ PAYMENT STATUS ═══ */}
+              {(taskDetails.paymentStatus !== 'unpaid' || payments.length > 0) && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <Hdr icon={DollarSign} title="Payment Status" badge={payments.length > 0 ? `${payments.length}` : null}/>
+                  
+                  {/* Overall Task Payment Status */}
+                  <div style={{ marginBottom:16, padding:14, background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                      <span style={{ fontSize:12, color:C.muted, fontWeight:500 }}>Task Payment Status</span>
+                      <span style={{
+                        padding:'4px 12px', borderRadius:20, fontSize:11, fontWeight:600,
+                        background: taskDetails.paymentStatus === 'paid' ? C.greenBg : taskDetails.paymentStatus === 'processing' ? C.blueBg : taskDetails.paymentStatus === 'pending' ? C.orangeBg : C.border,
+                        color: taskDetails.paymentStatus === 'paid' ? C.green : taskDetails.paymentStatus === 'processing' ? C.blue : taskDetails.paymentStatus === 'pending' ? C.orange : C.muted,
+                        border: `1px solid ${taskDetails.paymentStatus === 'paid' ? C.greenBdr : taskDetails.paymentStatus === 'processing' ? C.blueBdr : taskDetails.paymentStatus === 'pending' ? C.orangeBdr : C.border}`,
+                      }}>
+                        {taskDetails.paymentStatus?.toUpperCase() || 'UNPAID'}
+                      </span>
+                    </div>
+                    {taskDetails.paymentMethod && (
+                      <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:C.text }}>
+                        <Wallet size={14} style={{ color:C.accent }}/>
+                        <span>Method: <strong>{taskDetails.paymentMethod === 'crypto' ? 'Crypto (Escrow)' : 'Fiat'}</strong></span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Individual Payments */}
+                  {payments.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      <span style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Payment Records</span>
+                      {payments.map((payment, idx) => (
+                        <div key={idx} style={{ padding:12, background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <User size={14} style={{ color:C.accent }}/>
+                              <span style={{ fontSize:13, color:C.text, fontWeight:500 }}>
+                                {payment.recipient?.name || payment.recipient?.email || 'Unknown'}
+                              </span>
+                            </div>
+                            <span style={{ fontSize:15, fontWeight:700, color:C.text, fontFamily:"'Playfair Display',serif" }}>
+                              ${payment.amount?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, fontSize:11, color:C.muted }}>
+                            <div>
+                              <span style={{ display:'block', marginBottom:2 }}>Score</span>
+                              <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                <span style={{ fontSize:14, fontWeight:700, color:scoreColor(payment.score), fontFamily:"'Playfair Display',serif" }}>
+                                  {payment.score}/100
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <span style={{ display:'block', marginBottom:2 }}>Status</span>
+                              <span style={{
+                                padding:'2px 8px', borderRadius:12, fontSize:10, fontWeight:600,
+                                background: payment.status === 'completed' ? C.greenBg : payment.status === 'processing' ? C.blueBg : C.orangeBg,
+                                color: payment.status === 'completed' ? C.green : payment.status === 'processing' ? C.blue : C.orange,
+                                border: `1px solid ${payment.status === 'completed' ? C.greenBdr : payment.status === 'processing' ? C.blueBdr : C.orangeBdr}`,
+                              }}>
+                                {payment.status.toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+
+                          {payment.method === 'crypto' && payment.txHash && (
+                            <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:6 }}>
+                              <ExternalLink size={11} style={{ color:C.accent }}/>
+                              <a 
+                                href={`https://sepolia.etherscan.io/tx/${payment.txHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ fontSize:11, color:C.accent, textDecoration:'none', fontFamily:'monospace' }}
+                              >
+                                {payment.txHash.substring(0, 10)}...{payment.txHash.substring(payment.txHash.length - 8)}
+                              </a>
+                            </div>
+                          )}
+
+                          {payment.paidAt && (
+                            <div style={{ marginTop:6, fontSize:11, color:C.muted }}>
+                              Paid: {fmtDate(payment.paidAt)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : null}
         </div>
