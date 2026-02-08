@@ -8,6 +8,8 @@ const TaskSchema = new mongoose.Schema(
     status: { type: String, trim: true, default: "todo" },
     assignees: { type: [String], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    githubIssueNumber: { type: Number, default: null },
+    githubIssueUrl: { type: String, default: null },
   },
   { timestamps: true }
 );

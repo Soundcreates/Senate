@@ -128,4 +128,114 @@ const getRecentCommits = async (token, { limit = 5 } = {}) => {
   return merged.slice(0, limit);
 };
 
-module.exports = { getTodayCommits, getRecentCommits };
+/**
+ * Get the authenticated GitHub user's profile (login, id, etc.)
+ */
+const getGitHubUser = async (token) => {
+  return fetchGitHubJson("https://api.github.com/user", token);
+};
+
+/**
+ * Create a GitHub issue on a repo.
+ * Returns the created issue object (with .number, .html_url, etc.)
+ */
+const createIssue = async (owner, repo, title, body, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ title, body: body || "" }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_issue_create_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+/**
+ * Check if a user is a collaborator on a repo.
+ * Returns true/false. (204 = yes, 404 = no)
+ */
+const checkCollaborator = async (owner, repo, username, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators/${encodeURIComponent(username)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  return response.status === 204;
+};
+
+/**
+ * Add (invite) a user as a collaborator on a repo.
+ * If already a collaborator, GitHub returns 204.
+ * If invitation sent, GitHub returns 201.
+ */
+const addCollaborator = async (owner, repo, username, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators/${encodeURIComponent(username)}`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ permission: "push" }),
+  });
+
+  if (response.status === 201 || response.status === 204) {
+    return { ok: true, status: response.status === 201 ? "invited" : "already_collaborator" };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  const error = new Error("github_add_collaborator_failed");
+  error.status = response.status;
+  error.details = data;
+  throw error;
+};
+
+/**
+ * Assign GitHub usernames to an existing issue.
+ * `assignees` is an array of GitHub usernames.
+ */
+const assignIssue = async (owner, repo, issueNumber, assignees, token) => {
+  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "Datathon-2026",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({ assignees }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("github_issue_assign_failed");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+};
+
+module.exports = { getTodayCommits, getRecentCommits, fetchGitHubJson, createIssue, checkCollaborator, addCollaborator, assignIssue, getGitHubUser };

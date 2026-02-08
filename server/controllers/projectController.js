@@ -2,6 +2,7 @@ const Project = require("../models/Project");
 const ProjectDailyStats = require("../models/ProjectDailyStats");
 const User = require("../models/UserSchema");
 const { getTodayCommits } = require("../services/githubService");
+const { createIssue, checkCollaborator, addCollaborator, assignIssue } = require("../services/githubService");
 const { storeTodayStats } = require("../services/projectStatsService");
 
 const parseCookies = (req) => {
@@ -176,8 +177,9 @@ const createFullProject = async (req, res) => {
 		);
 
 		// Also create Task documents for the task controller compatibility
+		const Task = require("../models/Task");
 		for (const task of projectTasks) {
-			await require("../models/Task").create({
+			await Task.create({
 				projectId: project._id,
 				title: task.title,
 				description: task.description,
@@ -185,6 +187,78 @@ const createFullProject = async (req, res) => {
 				assignees: task.assignees.map(a => a.name),
 				createdBy: sessionUser._id,
 			});
+		}
+
+		// --- GitHub integration: create issues, ensure collaborators, assign ---
+		const token = sessionUser.githubTokens?.accessToken;
+		if (token && project.owner && project.repo) {
+			try {
+				// Resolve GitHub usernames for all team members
+				const githubUsernameMap = {}; // name -> githubUsername
+				for (const member of resolvedTeam) {
+					if (member.userId) {
+						const memberUser = await User.findById(member.userId);
+						if (memberUser?.githubUsername) {
+							githubUsernameMap[member.name] = memberUser.githubUsername;
+						}
+					}
+				}
+
+				// Ensure all resolved GitHub users are collaborators on the repo
+				for (const [memberName, ghUsername] of Object.entries(githubUsernameMap)) {
+					try {
+						const isCollab = await checkCollaborator(project.owner, project.repo, ghUsername, token);
+						if (!isCollab) {
+							const result = await addCollaborator(project.owner, project.repo, ghUsername, token);
+							console.log(`[GitHub] Collaborator ${result.status}: ${ghUsername} on ${project.owner}/${project.repo}`);
+						}
+					} catch (collabErr) {
+						console.warn(`[GitHub] Failed to add collaborator ${ghUsername}:`, collabErr.message);
+					}
+				}
+
+				// Create a GitHub issue for each task and assign developers
+				const allTasks = await Task.find({ projectId: project._id }).lean();
+				for (let i = 0; i < projectTasks.length; i++) {
+					const task = projectTasks[i];
+					try {
+						const assigneeNames = task.assignees.map(a => a.name);
+						const ghAssignees = assigneeNames
+							.map(n => githubUsernameMap[n])
+							.filter(Boolean);
+
+						const issueBody = [
+							task.description || "",
+							"",
+							`**Priority:** ${task.priority || "Medium"}`,
+							`**Estimated Hours:** ${task.estimatedHours || 0}`,
+							ghAssignees.length ? `**Assignees:** ${ghAssignees.map(u => `@${u}`).join(", ")}` : "",
+						].filter(Boolean).join("\n");
+
+						const issue = await createIssue(project.owner, project.repo, task.title, issueBody, token);
+
+						// Assign the issue to the developers' GitHub accounts
+						if (ghAssignees.length > 0) {
+							await assignIssue(project.owner, project.repo, issue.number, ghAssignees, token);
+						}
+
+						// Update the Task doc with the GitHub issue number
+						if (allTasks[i]) {
+							await Task.findByIdAndUpdate(allTasks[i]._id, {
+								githubIssueNumber: issue.number,
+								githubIssueUrl: issue.html_url,
+							});
+						}
+
+						console.log(`[GitHub] Issue #${issue.number} created for task "${task.title}" → assigned to [${ghAssignees.join(", ")}]`);
+					} catch (issueErr) {
+						console.warn(`[GitHub] Failed to create issue for task "${task.title}":`, issueErr.message);
+					}
+				}
+			} catch (ghErr) {
+				// Don't fail the whole project creation if GitHub integration fails
+				console.error("[GitHub] Integration error (non-blocking):", ghErr.message);
+			}
 		}
 
 		console.log(`[Project] ✅ Created full project "${name}" with ${resolvedTeam.length} members and ${projectTasks.length} tasks`);

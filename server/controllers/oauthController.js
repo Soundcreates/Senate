@@ -329,7 +329,8 @@ async function HandleGithubOAuth(req, res) {
 
 
 		user.githubId = githubId;
-		user.name = userData.name;
+		user.githubUsername = userData.login || null;
+		user.name = userData.name || userData.login;
 		user.githubTokens = {
 			accessToken: tokenData.access_token || null,
 			refreshToken: tokenData.refresh_token || null,

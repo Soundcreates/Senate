@@ -19,6 +19,7 @@ const UserSchema = new mongoose.Schema(
     avatarUrl: { type: String, trim: true },
     provider: { type: String, trim: true },
     githubId: { type: String, trim: true },
+    githubUsername: { type: String, trim: true },
     wakatimeId: { type: String, trim: true },
     wakatimeTokens: { type: TokenSchema, default: () => ({}) },
     githubTokens: { type: TokenSchema, default: () => ({}) },
