@@ -1,650 +1,545 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer } from 'lucide-react';
+import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer, Shield, Code2, FileCode, ChevronDown, ChevronUp, Target } from 'lucide-react';
 
+/* ─── Theme Tokens ─── */
+const C = {
+  bg: '#fbf7ef', card: '#ffffff', text: '#2d2a26', sub: '#5e503f', muted: '#a9927d',
+  border: 'rgba(169,146,125,0.15)', borderHov: 'rgba(169,146,125,0.3)',
+  accent: '#a9927d', accentDk: '#5e503f',
+  green: '#16a34a', greenBg: 'rgba(22,163,74,0.08)', greenBdr: 'rgba(22,163,74,0.2)',
+  red: '#dc2626', redBg: 'rgba(220,38,38,0.08)', redBdr: 'rgba(220,38,38,0.2)',
+  orange: '#ea580c', orangeBg: 'rgba(234,88,12,0.08)', orangeBdr: 'rgba(234,88,12,0.2)',
+  blue: '#2563eb', blueBg: 'rgba(37,99,235,0.08)', blueBdr: 'rgba(37,99,235,0.2)',
+  purple: '#7c3aed', purpleBg: 'rgba(124,58,237,0.08)', purpleBdr: 'rgba(124,58,237,0.2)',
+};
+const scoreColor = (s) => s >= 80 ? C.green : s >= 60 ? C.orange : C.red;
+
+/* ─── Score Ring ─── */
+const ScoreRing = ({ score, size = 72, sw = 6, label }) => {
+  const r = (size - sw) / 2, circ = 2 * Math.PI * r, off = circ - (score / 100) * circ, col = scoreColor(score);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={C.border} strokeWidth={sw}/>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={sw}
+            strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1s ease' }}/>
+        </svg>
+        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <span style={{ fontFamily:"'Playfair Display',serif", fontSize: size*0.3, fontWeight:700, color:col }}>{score}</span>
+        </div>
+      </div>
+      {label && <span style={{ fontSize:11, fontWeight:500, color:C.muted, textTransform:'uppercase', letterSpacing:'0.04em' }}>{label}</span>}
+    </div>
+  );
+};
+
+/* ─── Stat Card ─── */
+const StatCard = ({ icon: Icon, label, value, color, suffix }) => (
+  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:14, display:'flex', flexDirection:'column', gap:4 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+      {Icon && <Icon size={13} style={{ color:C.muted }}/>}
+      <span style={{ fontSize:11, color:C.muted, textTransform:'uppercase', letterSpacing:'0.04em', fontWeight:500 }}>{label}</span>
+    </div>
+    <span style={{ fontSize:22, fontWeight:700, color: color||C.text, fontFamily:"'Playfair Display',serif" }}>
+      {value}{suffix && <span style={{ fontSize:13, fontWeight:400, color:C.muted, marginLeft:2 }}>{suffix}</span>}
+    </span>
+  </div>
+);
+
+/* ─── Section Header ─── */
+const Hdr = ({ icon: Icon, title, badge }) => (
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+    <h3 style={{ fontSize:12, fontWeight:600, color:C.sub, textTransform:'uppercase', letterSpacing:'0.06em', display:'flex', alignItems:'center', gap:8, margin:0 }}>
+      {Icon && <Icon size={15} style={{ color:C.accent }}/>}{title}
+    </h3>
+    {badge && <span style={{ fontSize:11, color:C.muted, background:C.bg, padding:'3px 10px', borderRadius:20, border:`1px solid ${C.border}` }}>{badge}</span>}
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════════ */
 const TaskDetailModal = ({ task, projectId, onClose }) => {
   const [taskDetails, setTaskDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({ reviews: true, commits: false, aiReview: true });
+  const toggle = (k) => setExpandedSections(p => ({ ...p, [k]: !p[k] }));
 
-  // Countdown timer
   useEffect(() => {
     if (!taskDetails?.dueDate) return;
-
-    const updateCountdown = () => {
-      const now = new Date();
-      const due = new Date(taskDetails.dueDate);
-      const diff = due - now;
-
+    const update = () => {
+      const diff = new Date(taskDetails.dueDate) - new Date();
       if (diff <= 0) {
-        setTimeRemaining({ overdue: true, days: 0, hours: 0, minutes: 0 });
+        setTimeRemaining({ overdue: true, days: Math.abs(Math.floor(diff / 86400000)), hours: Math.abs(Math.floor((diff % 86400000) / 3600000)), minutes: Math.abs(Math.floor((diff % 3600000) / 60000)) });
       } else {
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        setTimeRemaining({ overdue: false, days, hours, minutes });
+        setTimeRemaining({ overdue: false, days: Math.floor(diff / 86400000), hours: Math.floor((diff % 86400000) / 3600000), minutes: Math.floor((diff % 3600000) / 60000) });
       }
     };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 60000); // Update every minute
-
-    return () => clearInterval(interval);
+    update();
+    const iv = setInterval(update, 60000);
+    return () => clearInterval(iv);
   }, [taskDetails?.dueDate]);
 
   useEffect(() => {
     const fetchTaskDetails = async () => {
       try {
         setLoading(true);
-        const url = `http://localhost:3000/api/projects/${projectId}/tasks/${task._id}/details`;
-        console.log('[TaskDetailModal] Fetching:', url);
-        
-        const response = await fetch(url, {
-          credentials: 'include',
-        });
-        
-        console.log('[TaskDetailModal] Response status:', response.status, response.statusText);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'unknown' }));
-          console.error('[TaskDetailModal] Error response:', errorData);
-          throw new Error(errorData.message || errorData.error || 'Failed to fetch task details');
-        }
-        
-        const data = await response.json();
-        console.log('[TaskDetailModal] Task details loaded:', data.task);
-        setTaskDetails(data.task);
-      } catch (err) {
-        console.error('[TaskDetailModal] Error fetching task details:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${task._id}/details`, { credentials: 'include' });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || 'Failed to fetch'); }
+        setTaskDetails((await res.json()).task);
+      } catch (err) { setError(err.message);
+      } finally { setLoading(false); }
     };
-
-    if (task && projectId) {
-      fetchTaskDetails();
-    }
+    if (task && projectId) fetchTaskDetails();
   }, [task, projectId]);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      todo: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
-      in_progress: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-      done: 'bg-green-500/20 text-green-300 border-green-500/30',
-    };
-    return colors[status] || colors.todo;
-  };
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : 'N/A';
+  const fmtRel = (d) => { if (!d) return ''; const m = Math.floor((Date.now() - new Date(d)) / 60000); if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); return h < 24 ? `${h}h ago` : `${Math.floor(h/24)}d ago`; };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(45, 42, 38, 0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
-      <div 
-        style={{ 
-          background: 'white',
-          border: '1px solid rgba(169, 146, 125, 0.15)',
-          borderRadius: '16px',
-          boxShadow: '0 20px 25px -5px rgba(45, 42, 38, 0.1), 0 10px 10px -5px rgba(45, 42, 38, 0.04)',
-          maxWidth: '56rem',
-          width: '100%',
-          maxHeight: '90vh',
-          overflow: 'auto',
-          fontFamily: "'Jost', sans-serif"
-        }}
+    <div style={{ position:'fixed', inset:0, display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16, background:'rgba(45,42,38,0.5)', backdropFilter:'blur(6px)' }} onClick={onClose}>
+      <div
+        style={{ background:C.bg, borderRadius:20, boxShadow:'0 25px 50px -12px rgba(45,42,38,0.25)', maxWidth:'52rem', width:'100%', maxHeight:'90vh', overflow:'hidden', fontFamily:"'Jost',sans-serif", display:'flex', flexDirection:'column' }}
         onClick={(e) => e.stopPropagation()}
       >
         <style>{`
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap');
-@keyframes spin { to { transform: rotate(360deg); } }
-.task-modal-content { background: #fbf7ef !important; border-color: rgba(169, 146, 125, 0.15) !important; }
-.task-modal-card { background: white !important; border-color: rgba(169, 146, 125, 0.15) !important; }
-.task-modal-text { color: #2d2a26 !important; }
-.task-modal-text-secondary { color: #a9927d !important; }
-.task-modal-text-muted { color: #5e503f !important; }
-.task-modal-border { border-color: rgba(169, 146, 125, 0.15) !important; }
-.bg-zinc-900 { background: white !important; border-color: rgba(169, 146, 125, 0.15) !important; }
-.bg-zinc-950\\/60 { background: #fbf7ef !important; }
-.border-zinc-800 { border-color: rgba(169, 146, 125, 0.15) !important; }
-.border-zinc-700 { border-color: rgba(169, 146, 125, 0.2) !important; }
-.text-zinc-300 { color: #2d2a26 !important; }
-.text-zinc-400 { color: #a9927d !important; }
-.text-zinc-500 { color: #a9927d !important; }
-.text-zinc-600 { color: #5e503f !important; }
-.text-white { color: #2d2a26 !important; }
-.bg-zinc-800 { background: rgba(169, 146, 125, 0.1) !important; }
-.bg-zinc-900\\/60 { background: white !important; }
-.bg-zinc-900\\/80 { background: white !important; }
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Jost:wght@300;400;500;600&display=swap');
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.tsec{animation:fadeIn .35s ease both}.tsec:nth-child(2){animation-delay:.05s}.tsec:nth-child(3){animation-delay:.1s}.tsec:nth-child(4){animation-delay:.15s}.tsec:nth-child(5){animation-delay:.2s}
+.hlift:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(45,42,38,0.08)}
         `}</style>
-        {/* Header */}
-        <div style={{ position: 'sticky', top: 0, background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(169, 146, 125, 0.1)', padding: '24px', display: 'flex', alignItems: 'start', justifyContent: 'space-between', zIndex: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: '24px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>{task.title}</h2>
+
+        {/* ── Header ── */}
+        <div style={{ background:C.card, borderBottom:`1px solid ${C.border}`, padding:'20px 24px', display:'flex', alignItems:'start', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8, flexWrap:'wrap' }}>
+              <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:600, color:C.text, margin:0 }}>{task.title}</h2>
+              <span style={{
+                padding:'3px 12px', borderRadius:20, fontSize:11, fontWeight:600, letterSpacing:'0.04em',
+                background: (taskDetails?.status||task.status)==='done' ? C.greenBg : C.orangeBg,
+                color: (taskDetails?.status||task.status)==='done' ? C.green : C.orange,
+                border:`1px solid ${(taskDetails?.status||task.status)==='done' ? C.greenBdr : C.orangeBdr}`,
+              }}>
+                {(taskDetails?.status || task.status || 'todo').replace('_',' ').toUpperCase()}
+              </span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
               {taskDetails?.githubIssueUrl && (
-                <a
-                  href={taskDetails.githubIssueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', color: '#a9927d', textDecoration: 'none', transition: 'color 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#5e503f'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#a9927d'}
-                >
-                  <Github size={16} />
-                  <span>#{taskDetails.githubIssueNumber}</span>
-                  <ExternalLink size={12} />
+                <a href={taskDetails.githubIssueUrl} target="_blank" rel="noopener noreferrer" style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:C.muted, textDecoration:'none' }}>
+                  <Github size={14}/> #{taskDetails.githubIssueNumber} <ExternalLink size={10}/>
                 </a>
               )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '500', border: '1px solid rgba(169, 146, 125, 0.3)', background: 'rgba(169, 146, 125, 0.1)', color: '#5e503f' }}>
-                {task.status.replace('_', ' ').toUpperCase()}
-              </span>
-              {taskDetails?.github?.issue?.labels?.map((label, idx) => (
-                <span key={idx} style={{ padding: '4px 8px', background: '#fbf7ef', color: '#5e503f', fontSize: '11px', borderRadius: '6px', border: '1px solid rgba(169, 146, 125, 0.2)' }}>
-                  {label}
-                </span>
+              {taskDetails?.github?.issue?.labels?.map((lb, i) => (
+                <span key={i} style={{ padding:'2px 8px', background:C.bg, color:C.sub, fontSize:11, borderRadius:6, border:`1px solid ${C.border}` }}>{lb}</span>
               ))}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ color: '#a9927d', transition: 'all 0.2s', padding: '8px', background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#2d2a26'; e.currentTarget.style.background = '#fbf7ef'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#a9927d'; e.currentTarget.style.background = 'transparent'; }}
-          >
-            <X size={24} />
+          <button onClick={onClose} style={{ color:C.muted, padding:6, background:'transparent', border:'none', cursor:'pointer', borderRadius:8, transition:'all .2s' }}
+            onMouseEnter={e=>{e.currentTarget.style.background=C.bg;e.currentTarget.style.color=C.text}}
+            onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color=C.muted}}>
+            <X size={22}/>
           </button>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* ── Scrollable Body ── */}
+        <div style={{ overflow:'auto', padding:'20px 24px', display:'flex', flexDirection:'column', gap:18 }}>
           {loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0' }}>
-              <div style={{ width: '48px', height: '48px', border: '3px solid rgba(169, 146, 125, 0.2)', borderTop: '3px solid #a9927d', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'60px 0', gap:12 }}>
+              <div style={{ width:40, height:40, border:`3px solid ${C.border}`, borderTop:`3px solid ${C.accent}`, borderRadius:'50%', animation:'spin 1s linear infinite' }}/>
+              <span style={{ fontSize:13, color:C.muted }}>Loading task details...</span>
             </div>
           ) : error ? (
-            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <AlertCircle style={{ color: '#dc2626' }} size={20} />
-              <p style={{ color: '#dc2626', margin: 0 }}>{error}</p>
+            <div style={{ background:C.redBg, border:`1px solid ${C.redBdr}`, borderRadius:12, padding:16, display:'flex', alignItems:'center', gap:12 }}>
+              <AlertCircle size={18} style={{ color:C.red }}/><p style={{ color:C.red, margin:0, fontSize:14 }}>{error}</p>
             </div>
           ) : taskDetails ? (
             <>
-              {/* Description */}
-              {taskDetails.description && (
-                <div style={{ background: '#fbf7ef', border: '1px solid rgba(169, 146, 125, 0.15)', borderRadius: '12px', padding: '16px' }}>
-                  <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#5e503f', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Description</h3>
-                  <p style={{ color: '#2d2a26', whiteSpace: 'pre-wrap', margin: 0 }}>{taskDetails.description}</p>
-                </div>
-              )}
-
-              {/* Due Date Countdown */}
-              {taskDetails.dueDate && timeRemaining && (
-                <div style={{ 
-                  background: timeRemaining.overdue 
-                    ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05))' 
-                    : timeRemaining.days <= 1 
-                      ? 'linear-gradient(135deg, rgba(251, 146, 60, 0.1), rgba(249, 115, 22, 0.05))'
-                      : 'linear-gradient(135deg, rgba(74, 222, 128, 0.1), rgba(34, 197, 94, 0.05))',
-                  border: `1px solid ${timeRemaining.overdue ? 'rgba(239, 68, 68, 0.3)' : timeRemaining.days <= 1 ? 'rgba(251, 146, 60, 0.3)' : 'rgba(74, 222, 128, 0.3)'}`, 
-                  borderRadius: '12px', 
-                  padding: '20px' 
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#5e503f', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                      <Timer size={16} />
-                      {timeRemaining.overdue ? 'Overdue' : 'Time Remaining'}
-                    </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#a9927d' }}>
-                      <Calendar size={14} />
-                      <span>Due: {new Date(taskDetails.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
-                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
-                        {timeRemaining.days}
+              {/* ═══ OVERALL SCORE + RINGS ═══ */}
+              {taskDetails.scores?.overall != null && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:24 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:20 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:20 }}>
+                      <ScoreRing score={taskDetails.scores.overall} size={90} sw={7}/>
+                      <div>
+                        <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:600, color:C.text, margin:'0 0 4px 0' }}>Overall Score</h3>
+                        <p style={{ fontSize:13, color:C.muted, margin:0 }}>Weighted average across all metrics</p>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Days</div>
                     </div>
-                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
-                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
-                        {timeRemaining.hours}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Hours</div>
+                    <div style={{ display:'flex', gap:24 }}>
+                      {taskDetails.scores.punctuality!=null && <ScoreRing score={taskDetails.scores.punctuality} size={62} sw={5} label="Punctuality"/>}
+                      {taskDetails.scores.codeReview!=null && <ScoreRing score={taskDetails.scores.codeReview} size={62} sw={5} label="Code Review"/>}
+                      {taskDetails.scores.codingTime!=null && <ScoreRing score={taskDetails.scores.codingTime} size={62} sw={5} label="Coding Time"/>}
                     </div>
-                    <div style={{ flex: 1, background: 'white', borderRadius: '10px', padding: '16px', textAlign: 'center', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
-                      <div style={{ fontSize: '32px', fontWeight: '700', color: timeRemaining.overdue ? '#dc2626' : timeRemaining.days <= 1 ? '#f59e0b' : '#16a34a', fontFamily: "'Playfair Display', serif" }}>
-                        {timeRemaining.minutes}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#a9927d', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Minutes</div>
-                    </div>
-                  </div>
-                  {taskDetails.estimatedHours > 0 && (
-                    <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(169, 146, 125, 0.08)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#5e503f' }}>
-                      <Clock size={14} />
-                      <span>Estimated: {taskDetails.estimatedHours} hours ({Math.ceil(taskDetails.estimatedHours / 8)} days)</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Assignees */}
-              {taskDetails.assignees && taskDetails.assignees.length > 0 && (
-                <div style={{ background: '#fbf7ef', border: '1px solid rgba(169, 146, 125, 0.15)', borderRadius: '12px', padding: '16px' }}>
-                  <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#5e503f', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <User size={16} />
-                    Assigned To
-                  </h3>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {taskDetails.assignees.map((assignee, idx) => {
-                      const wakatimeData = taskDetails.wakatime?.assigneeStats?.find(s => s.name === assignee);
-                      return (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', border: '1px solid rgba(169, 146, 125, 0.15)', borderRadius: '10px', padding: '12px 16px', flex: '1 1 200px' }}>
-                          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(169, 146, 125, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', color: '#5e503f', border: '2px solid rgba(169, 146, 125, 0.3)' }}>
-                            {assignee.charAt(0).toUpperCase()}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <p style={{ color: '#2d2a26', fontWeight: '500', margin: 0 }}>{assignee}</p>
-                            {wakatimeData?.connected && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#a9927d', marginTop: '4px' }}>
-                                <Activity size={12} style={{ color: '#16a34a' }} />
-                                <span style={{ color: '#16a34a' }}>{wakatimeData.totalHours}h this week</span>
-                                <span>•</span>
-                                <span>{wakatimeData.dailyAverage}h/day avg</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
               )}
 
-              {/* Code Review Score */}
-              {taskDetails.github?.connected && taskDetails.github.codeReviewScore > 0 && (
-                <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-green-300 uppercase tracking-wide flex items-center gap-2">
-                      <Award size={16} />
-                      Code Review Score
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <div className={`text-3xl font-bold ${
-                        taskDetails.github.codeReviewScore >= 80 ? 'text-green-400' :
-                        taskDetails.github.codeReviewScore >= 60 ? 'text-yellow-400' :
-                        'text-orange-400'
-                      }`}>
-                        {taskDetails.github.codeReviewScore}
-                      </div>
-                      <span className="text-zinc-500 text-lg">/100</span>
+              {/* ═══ SCORE BREAKDOWN CARDS ═══ */}
+              <div className="tsec" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:14 }}>
+                {/* Punctuality */}
+                <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                    <div style={{ width:32, height:32, borderRadius:10, background:C.greenBg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Timer size={16} style={{ color:C.green }}/>
+                    </div>
+                    <div>
+                      <p style={{ fontSize:12, fontWeight:600, color:C.sub, margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>Punctuality</p>
+                      <p style={{ fontSize:10, color:C.muted, margin:0 }}>100% till deadline, then decreases</p>
                     </div>
                   </div>
-                  <div className="w-full bg-zinc-800 rounded-full h-3 overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-1000 ${
-                        taskDetails.github.codeReviewScore >= 80 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
-                        taskDetails.github.codeReviewScore >= 60 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
-                        'bg-gradient-to-r from-orange-500 to-red-500'
-                      }`}
-                      style={{ width: `${taskDetails.github.codeReviewScore}%` }}
-                    />
-                  </div>
-                  {taskDetails.github.reviews && taskDetails.github.reviews.length > 0 && (
-                    <div className="mt-4 text-xs text-zinc-400">
-                      <p className="mb-2 font-medium">Recent Reviews:</p>
-                      <div className="space-y-2">
-                        {taskDetails.github.reviews.slice(0, 3).map((review, idx) => (
-                          <div key={idx} className="bg-zinc-900/60 border border-zinc-700 rounded-lg p-2">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium text-indigo-400">{review.author}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                                review.state === 'APPROVED' ? 'bg-green-500/20 text-green-300' :
-                                review.state === 'CHANGES_REQUESTED' ? 'bg-red-500/20 text-red-300' :
-                                'bg-zinc-700 text-zinc-300'
-                              }`}>
-                                {review.state.replace('_', ' ')}
-                              </span>
-                              <span className="text-zinc-600">•</span>
-                              <span className="text-zinc-500">PR #{review.prNumber}</span>
-                            </div>
-                            {review.body && (
-                              <p className="text-zinc-400 line-clamp-2">{review.body}</p>
-                            )}
-                          </div>
-                        ))}
+                  {taskDetails.scores?.punctuality!=null ? (
+                    <>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8 }}>
+                        <span style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:700, color:scoreColor(taskDetails.scores.punctuality) }}>{taskDetails.scores.punctuality}</span>
+                        <span style={{ fontSize:12, color:C.muted }}>/100</span>
                       </div>
-                    </div>
-                  )}
+                      <div style={{ height:4, background:C.bg, borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${taskDetails.scores.punctuality}%`, background:scoreColor(taskDetails.scores.punctuality), borderRadius:2, transition:'width 1s ease' }}/>
+                      </div>
+                      {timeRemaining && <p style={{ fontSize:11, color:timeRemaining.overdue?C.red:C.muted, margin:'8px 0 0 0' }}>{timeRemaining.overdue?`⚠ ${timeRemaining.days}d ${timeRemaining.hours}h overdue`:`${timeRemaining.days}d ${timeRemaining.hours}h remaining`}</p>}
+                    </>
+                  ) : <p style={{ fontSize:12, color:C.muted, margin:0 }}>No deadline set</p>}
                 </div>
-              )}
 
-              {/* WakaTime Activity */}
-              {taskDetails.wakatime?.assigneeStats?.some(s => s.connected) && (
-                <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-purple-300 uppercase tracking-wide mb-4 flex items-center gap-2">
-                    <Zap size={16} />
-                    Developer Activity (Last 7 Days)
-                  </h3>
-                  <div className="space-y-4">
-                    {taskDetails.wakatime.assigneeStats.filter(s => s.connected).map((stats, idx) => (
-                      <div key={idx} className="bg-zinc-900/60 border border-zinc-700 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-sm text-purple-400 border border-purple-500/30">
-                              {stats.name.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="text-zinc-300 font-medium">{stats.name}</span>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-purple-400">{stats.totalHours}h</p>
-                            <p className="text-xs text-zinc-500">{stats.dailyAverage}h/day</p>
-                          </div>
-                        </div>
-                        {stats.lastSevenDays && stats.lastSevenDays.length > 0 && (
-                          <div className="grid grid-cols-7 gap-1 mt-3">
-                            {stats.lastSevenDays.map((day, dayIdx) => {
-                              const maxHours = Math.max(...stats.lastSevenDays.map(d => parseFloat(d.hours)));
-                              const heightPercent = maxHours > 0 ? (parseFloat(day.hours) / maxHours) * 100 : 0;
-                              return (
-                                <div key={dayIdx} className="flex flex-col items-center gap-1">
-                                  <div className="w-full h-16 bg-zinc-800 rounded relative overflow-hidden">
-                                    <div 
-                                      className="absolute bottom-0 w-full bg-gradient-to-t from-purple-500 to-pink-500 transition-all"
-                                      style={{ height: `${heightPercent}%` }}
-                                      title={`${day.hours}h`}
-                                    />
-                                  </div>
-                                  <span className="text-[10px] text-zinc-600">
-                                    {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 1)}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                {/* Code Review */}
+                <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                    <div style={{ width:32, height:32, borderRadius:10, background:C.blueBg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Shield size={16} style={{ color:C.blue }}/>
+                    </div>
+                    <div>
+                      <p style={{ fontSize:12, fontWeight:600, color:C.sub, margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>Code Review</p>
+                      <p style={{ fontSize:10, color:C.muted, margin:0 }}>Fewer issues → higher score</p>
+                    </div>
+                  </div>
+                  {taskDetails.scores?.codeReview!=null ? (
+                    <>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8 }}>
+                        <span style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:700, color:scoreColor(taskDetails.scores.codeReview) }}>{taskDetails.scores.codeReview}</span>
+                        <span style={{ fontSize:12, color:C.muted }}>/100</span>
+                      </div>
+                      <div style={{ height:4, background:C.bg, borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${taskDetails.scores.codeReview}%`, background:scoreColor(taskDetails.scores.codeReview), borderRadius:2, transition:'width 1s ease' }}/>
+                      </div>
+                      <div style={{ display:'flex', gap:12, marginTop:8, fontSize:11, color:C.muted }}>
+                        {taskDetails.github?.reviews && (
+                          <>
+                            <span style={{ color:C.green }}>✓ {taskDetails.github.reviews.filter(r=>r.state==='APPROVED').length} approved</span>
+                            <span style={{ color:C.red }}>✗ {taskDetails.github.reviews.filter(r=>r.state==='CHANGES_REQUESTED').length} changes</span>
+                          </>
                         )}
                       </div>
+                    </>
+                  ) : <p style={{ fontSize:12, color:C.muted, margin:0 }}>No PRs submitted yet</p>}
+                </div>
+
+                {/* Coding Time */}
+                <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                    <div style={{ width:32, height:32, borderRadius:10, background:C.purpleBg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      <Code2 size={16} style={{ color:C.purple }}/>
+                    </div>
+                    <div>
+                      <p style={{ fontSize:12, fontWeight:600, color:C.sub, margin:0, textTransform:'uppercase', letterSpacing:'0.04em' }}>Coding Time</p>
+                      <p style={{ fontSize:10, color:C.muted, margin:0 }}>Proportional to estimated hours</p>
+                    </div>
+                  </div>
+                  {taskDetails.scores?.codingTime!=null ? (
+                    <>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8 }}>
+                        <span style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:700, color:scoreColor(taskDetails.scores.codingTime) }}>{taskDetails.scores.codingTime}</span>
+                        <span style={{ fontSize:12, color:C.muted }}>/100</span>
+                      </div>
+                      <div style={{ height:4, background:C.bg, borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:`${taskDetails.scores.codingTime}%`, background:scoreColor(taskDetails.scores.codingTime), borderRadius:2, transition:'width 1s ease' }}/>
+                      </div>
+                      <p style={{ fontSize:11, color:C.muted, margin:'8px 0 0 0' }}>
+                        {(taskDetails.wakatime?.assigneeStats?.reduce((s,a)=>s+(a.totalHours||0),0)||0).toFixed(1)}h coded / {taskDetails.estimatedHours||'?'}h estimated
+                      </p>
+                    </>
+                  ) : <p style={{ fontSize:12, color:C.muted, margin:0 }}>No coding time data</p>}
+                </div>
+              </div>
+
+              {/* ═══ COUNTDOWN + ASSIGNEES ═══ */}
+              <div className="tsec" style={{ display:'grid', gridTemplateColumns: taskDetails.dueDate ? '1fr 1fr' : '1fr', gap:14 }}>
+                {taskDetails.dueDate && timeRemaining && (
+                  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                    <Hdr icon={Calendar} title={timeRemaining.overdue?'Overdue':'Time Left'} badge={fmtDate(taskDetails.dueDate)}/>
+                    <div style={{ display:'flex', gap:10 }}>
+                      {[{v:timeRemaining.days,l:'Days'},{v:timeRemaining.hours,l:'Hrs'},{v:timeRemaining.minutes,l:'Min'}].map((it,i)=>(
+                        <div key={i} style={{ flex:1, background:C.bg, borderRadius:10, padding:'12px 8px', textAlign:'center', border:`1px solid ${C.border}` }}>
+                          <div style={{ fontSize:24, fontWeight:700, color: timeRemaining.overdue?C.red:timeRemaining.days<=1?C.orange:C.green, fontFamily:"'Playfair Display',serif" }}>{it.v}</div>
+                          <div style={{ fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.04em', marginTop:2 }}>{it.l}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {taskDetails.estimatedHours > 0 && (
+                      <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, fontSize:12, color:C.muted }}>
+                        <Clock size={12}/> Est. {taskDetails.estimatedHours}h ({Math.ceil(taskDetails.estimatedHours/8)}d)
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {taskDetails.assignees?.length > 0 && (
+                  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                    <Hdr icon={User} title="Assigned To"/>
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {taskDetails.assignees.map((a,i)=>{
+                        const wk = taskDetails.wakatime?.assigneeStats?.find(s=>s.name===a);
+                        return (
+                          <div key={i} style={{ display:'flex', alignItems:'center', gap:12, background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px' }}>
+                            <div style={{ width:36, height:36, borderRadius:'50%', background:C.card, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, color:C.sub, border:`2px solid ${C.border}`, fontWeight:600 }}>
+                              {a.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ flex:1 }}>
+                              <p style={{ color:C.text, fontWeight:500, margin:0, fontSize:14 }}>{a}</p>
+                              {wk?.connected && (
+                                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:C.muted, marginTop:2 }}>
+                                  <Activity size={11} style={{ color:C.green }}/> <span style={{ color:C.green }}>{wk.totalHours}h/wk</span>
+                                  <span style={{ color:C.border }}>|</span> <span>{wk.dailyAverage}h/day</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ═══ AI CODE REVIEW ═══ */}
+              {taskDetails.github?.aiReview && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
+                  <div onClick={()=>toggle('aiReview')} style={{ padding:18, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer' }}>
+                    <div style={{ flex:1 }}>
+                      <h3 style={{ fontSize:14, fontWeight:600, color:C.text, margin:0 }}>AI Code Review</h3>
+                      <p style={{ fontSize:12, color:C.muted, margin:'2px 0 0 0', maxWidth:420, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{taskDetails.github.aiReview.summary}</p>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <span style={{ fontSize:18, fontWeight:700, fontFamily:"'Playfair Display',serif", color:scoreColor(taskDetails.github.aiReview.qualityScore) }}>
+                        {taskDetails.github.aiReview.qualityScore}/100
+                      </span>
+                      {expandedSections.aiReview ? <ChevronUp size={16} style={{ color:C.muted }}/> : <ChevronDown size={16} style={{ color:C.muted }}/>}
+                    </div>
+                  </div>
+                  {expandedSections.aiReview && (
+                    <div style={{ borderTop:`1px solid ${C.border}`, padding:'14px 18px', display:'flex', flexDirection:'column', gap:12 }}>
+
+                      {/* Issue Addressal Check */}
+                      {taskDetails.github.aiReview.issueAddressal && (
+                        <div style={{ padding:'12px 14px', borderRadius:10, border:`1px solid ${taskDetails.github.aiReview.issueAddressal.addressed ? C.greenBdr : C.redBdr}`, background: taskDetails.github.aiReview.issueAddressal.addressed ? C.greenBg : C.redBg }}>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                            <span style={{ fontSize:12, fontWeight:600, color: taskDetails.github.aiReview.issueAddressal.addressed ? C.green : C.red }}>
+                              {taskDetails.github.aiReview.issueAddressal.addressed ? '✓ Issue Addressed' : '✗ Issue Not Fully Addressed'}
+                            </span>
+                            <span style={{ fontSize:11, color:C.muted }}>{taskDetails.github.aiReview.issueAddressal.confidence}% confidence</span>
+                          </div>
+                          <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.5 }}>{taskDetails.github.aiReview.issueAddressal.reasoning}</p>
+                          {taskDetails.github.aiReview.issueAddressal.missingItems?.length > 0 && (
+                            <div style={{ marginTop:8 }}>
+                              <p style={{ fontSize:11, fontWeight:600, color:C.red, margin:'0 0 4px 0' }}>Missing:</p>
+                              {taskDetails.github.aiReview.issueAddressal.missingItems.map((item,idx)=>(
+                                <p key={idx} style={{ fontSize:12, color:C.text, margin:'2px 0', paddingLeft:10, borderLeft:`2px solid ${C.redBdr}` }}>• {item}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Issues */}
+                      {taskDetails.github.aiReview.issues?.length>0 && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:250, overflowY:'auto' }}>
+                          {taskDetails.github.aiReview.issues.map((iss,i)=>(
+                            <div key={i} style={{ display:'flex', gap:10, padding:'10px 12px', background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+                              <span style={{
+                                fontSize:10, fontWeight:600, textTransform:'uppercase', padding:'2px 8px', borderRadius:4, whiteSpace:'nowrap', height:'fit-content',
+                                background: iss.severity==='critical'?C.redBg:iss.severity==='high'?C.orangeBg:iss.severity==='medium'?'#fef3c7':C.greenBg,
+                                color: iss.severity==='critical'?C.red:iss.severity==='high'?C.orange:iss.severity==='medium'?'#92400e':C.green,
+                                border:`1px solid ${iss.severity==='critical'?C.redBdr:iss.severity==='high'?C.orangeBdr:iss.severity==='medium'?'#fde68a':C.greenBdr}`,
+                              }}>{iss.severity}</span>
+                              <div style={{ flex:1 }}>
+                                <p style={{ fontSize:13, color:C.text, margin:0, fontWeight:500 }}>{iss.message}</p>
+                                {iss.file && <p style={{ fontSize:11, color:C.muted, margin:'2px 0 0 0', fontFamily:'monospace' }}>{iss.file}{iss.line?`:${iss.line}`:''}</p>}
+                                {iss.suggestion && (
+                                  <div style={{ marginTop:6, padding:'6px 10px', background:C.greenBg, borderRadius:6, fontSize:12, color:C.sub, borderLeft:`3px solid ${C.green}` }}>
+                                    Suggestion: {iss.suggestion}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Suggested Changes */}
+                      {taskDetails.github.aiReview.suggestedChanges?.length > 0 && (
+                        <div>
+                          <p style={{ fontSize:12, fontWeight:600, color:C.sub, margin:'0 0 8px 0', textTransform:'uppercase', letterSpacing:'0.04em' }}>Suggested Changes</p>
+                          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                            {taskDetails.github.aiReview.suggestedChanges.map((sc,i)=>(
+                              <div key={i} style={{ padding:'10px 12px', background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, borderLeft:`3px solid ${sc.priority==='high'?C.orange:sc.priority==='medium'?C.accent:C.muted}` }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                                  <span style={{ fontFamily:'monospace', fontSize:11, color:C.sub, fontWeight:500 }}>{sc.file}</span>
+                                  <span style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', color: sc.priority==='high'?C.orange:sc.priority==='medium'?C.sub:C.muted }}>{sc.priority}</span>
+                                </div>
+                                <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.5 }}>{sc.description}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ GITHUB REVIEW COMMENTS ═══ */}
+              {taskDetails.github?.reviewComments?.length > 0 && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
+                  <div onClick={()=>toggle('reviews')} style={{ padding:18, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flex:1, marginRight:10 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:C.sub, textTransform:'uppercase', letterSpacing:'0.06em' }}>Code Review Comments</span>
+                      <span style={{ fontSize:11, color:C.muted, background:C.bg, padding:'3px 10px', borderRadius:20, border:`1px solid ${C.border}` }}>{taskDetails.github.reviewComments.length}</span>
+                    </div>
+                    {expandedSections.reviews ? <ChevronUp size={16} style={{ color:C.muted }}/> : <ChevronDown size={16} style={{ color:C.muted }}/>}
+                  </div>
+                  {expandedSections.reviews && (
+                    <div style={{ borderTop:`1px solid ${C.border}`, padding:'14px 18px', display:'flex', flexDirection:'column', gap:8, maxHeight:300, overflowY:'auto' }}>
+                      {taskDetails.github.reviewComments.map((cm,i)=>(
+                        <div key={i} style={{ padding:'10px 12px', background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                            <span style={{ fontSize:12, fontWeight:600, color:cm.authorType==='bot'?C.purple:C.blue }}>{cm.author}</span>
+                            {cm.authorType==='bot' && <span style={{ fontSize:9, background:C.purpleBg, color:C.purple, padding:'1px 6px', borderRadius:4, fontWeight:600 }}>BOT</span>}
+                            {cm.path && <span style={{ fontSize:11, color:C.muted, fontFamily:'monospace' }}>{cm.path}{cm.line?`:${cm.line}`:''}</span>}
+                            <span style={{ fontSize:11, color:C.muted, marginLeft:'auto' }}>{fmtRel(cm.createdAt)}</span>
+                          </div>
+                          <p style={{ fontSize:12, color:C.text, margin:0, lineHeight:1.5, whiteSpace:'pre-wrap', maxHeight:120, overflow:'hidden' }}>{cm.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ CODE STATISTICS ═══ */}
+              {taskDetails.github?.connected && taskDetails.github.prs?.length > 0 && (
+                <div className="tsec" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                  <StatCard icon={ArrowUp} label="Lines Added" value={`+${taskDetails.github.stats?.totalAdditions||0}`} color={C.green}/>
+                  <StatCard icon={ArrowDown} label="Lines Deleted" value={`-${taskDetails.github.stats?.totalDeletions||0}`} color={C.red}/>
+                  <StatCard icon={FileCode} label="Files Changed" value={taskDetails.github.stats?.totalChangedFiles||0} color={C.blue}/>
+                  <StatCard icon={GitPullRequest} label="Merged PRs" value={taskDetails.github.stats?.mergedPRs||0} suffix={`/${taskDetails.github.prs.length}`} color={C.purple}/>
+                </div>
+              )}
+
+              {/* ═══ BRANCH ACTIVITY ═══ */}
+              {taskDetails.github?.branch && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, overflow:'hidden' }}>
+                  <div onClick={()=>toggle('commits')} style={{ padding:18, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer' }}>
+                    <Hdr icon={GitBranch} title="Branch Activity"/>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <span style={{ fontFamily:'monospace', fontSize:11, background:C.bg, padding:'3px 10px', borderRadius:20, color:C.sub, border:`1px solid ${C.border}` }}>
+                        {taskDetails.github.branch.branchName}
+                      </span>
+                      {expandedSections.commits ? <ChevronUp size={16} style={{ color:C.muted }}/> : <ChevronDown size={16} style={{ color:C.muted }}/>}
+                    </div>
+                  </div>
+                  {expandedSections.commits && (
+                    <div style={{ borderTop:`1px solid ${C.border}`, padding:'14px 18px' }}>
+                      {taskDetails.github.branch.comparison && (
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom:14 }}>
+                          <StatCard icon={ArrowUp} label="Ahead" value={taskDetails.github.branch.comparison.aheadBy} color={C.green}/>
+                          <StatCard icon={ArrowDown} label="Behind" value={taskDetails.github.branch.comparison.behindBy} color={C.orange}/>
+                          <StatCard icon={FileCode} label="Files" value={taskDetails.github.branch.comparison.filesChanged} color={C.blue}/>
+                          <StatCard icon={GitCommit} label="Commits" value={taskDetails.github.branch.comparison.totalCommits} color={C.purple}/>
+                        </div>
+                      )}
+                      {taskDetails.github.branch.commits?.length > 0 && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:240, overflowY:'auto' }}>
+                          {taskDetails.github.branch.commits.slice(0,10).map(cm=>(
+                            <a key={cm.sha} href={cm.url} target="_blank" rel="noopener noreferrer" className="hlift"
+                              style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, textDecoration:'none', transition:'all .2s' }}>
+                              <div style={{ width:28, height:28, borderRadius:'50%', background:C.card, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:C.sub, border:`1px solid ${C.border}`, fontWeight:600, flexShrink:0 }}>
+                                {cm.author.charAt(0).toUpperCase()}
+                              </div>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <p style={{ fontSize:13, color:C.text, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{cm.message.split('\n')[0]}</p>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:C.muted, marginTop:2 }}>
+                                  <span>{cm.author}</span>
+                                  <span style={{ fontFamily:'monospace', fontSize:10, background:C.card, padding:'1px 6px', borderRadius:4, border:`1px solid ${C.border}` }}>{cm.sha.substring(0,7)}</span>
+                                  <span>{fmtRel(cm.date)}</span>
+                                </div>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ PULL REQUESTS ═══ */}
+              {taskDetails.github?.prs?.length > 0 && (
+                <div className="tsec" style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <Hdr icon={GitPullRequest} title="Pull Requests" badge={`${taskDetails.github.prs.length}`}/>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {taskDetails.github.prs.map(pr=>(
+                      <a key={pr.number} href={pr.url} target="_blank" rel="noopener noreferrer" className="hlift"
+                        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 14px', background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, textDecoration:'none', transition:'all .2s', gap:12 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
+                          {pr.merged ? <CheckCircle2 size={16} style={{ color:C.purple, flexShrink:0 }}/> : pr.state==='open' ? <GitPullRequest size={16} style={{ color:C.green, flexShrink:0 }}/> : <X size={16} style={{ color:C.red, flexShrink:0 }}/>}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <p style={{ fontSize:13, color:C.text, fontWeight:500, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>#{pr.number} {pr.title}</p>
+                            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:C.muted, marginTop:2 }}>
+                              <span>{pr.author}</span>
+                              <span style={{ color:C.green }}>+{pr.additions}</span>
+                              <span style={{ color:C.red }}>-{pr.deletions}</span>
+                              {pr.reviewScore>0 && (
+                                <span style={{ display:'flex', alignItems:'center', gap:3 }}>
+                                  <Award size={10} style={{ color:scoreColor(pr.reviewScore) }}/>
+                                  <span style={{ color:scoreColor(pr.reviewScore), fontWeight:600 }}>{pr.reviewScore}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{
+                          padding:'3px 10px', borderRadius:20, fontSize:10, fontWeight:600, flexShrink:0,
+                          background:pr.merged?C.purpleBg:pr.state==='open'?C.greenBg:C.redBg,
+                          color:pr.merged?C.purple:pr.state==='open'?C.green:C.red,
+                          border:`1px solid ${pr.merged?C.purpleBdr:pr.state==='open'?C.greenBdr:C.redBdr}`,
+                        }}>
+                          {pr.merged?'MERGED':pr.state.toUpperCase()}
+                        </span>
+                      </a>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* GitHub Stats */}
-              {taskDetails.github?.connected && (
-                <>
-                  {/* Code Statistics */}
-                  {taskDetails.github.prs.length > 0 && (
-                    <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-indigo-300 uppercase tracking-wide mb-4 flex items-center gap-2">
-                        <GitBranch size={16} />
-                        Code Statistics
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                          <p className="text-xs text-zinc-500 mb-1">Lines Added</p>
-                          <p className="text-2xl font-bold text-green-400">+{taskDetails.github.stats.totalAdditions}</p>
-                        </div>
-                        <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                          <p className="text-xs text-zinc-500 mb-1">Lines Deleted</p>
-                          <p className="text-2xl font-bold text-red-400">-{taskDetails.github.stats.totalDeletions}</p>
-                        </div>
-                        <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                          <p className="text-xs text-zinc-500 mb-1">Files Changed</p>
-                          <p className="text-2xl font-bold text-blue-400">{taskDetails.github.stats.totalChangedFiles}</p>
-                        </div>
-                        <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                          <p className="text-xs text-zinc-500 mb-1">Merged PRs</p>
-                          <p className="text-2xl font-bold text-purple-400">{taskDetails.github.stats.mergedPRs}/{taskDetails.github.prs.length}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Branch Activity */}
-                  {taskDetails.github?.branch && (
-                    <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide flex items-center gap-2">
-                          <GitBranch size={16} />
-                          Branch Activity
-                        </h3>
-                        <span className="font-mono text-xs bg-zinc-900 px-3 py-1 rounded-full text-indigo-400 border border-zinc-700">
-                          {taskDetails.github.branch.branchName}
-                        </span>
-                      </div>
-
-                      {/* Branch Comparison Stats */}
-                      {taskDetails.github.branch.comparison && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                          <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                            <p className="text-xs text-zinc-500 mb-1 flex items-center gap-1">
-                              <ArrowUp size={12} className="text-green-400" />
-                              Ahead
-                            </p>
-                            <p className="text-xl font-bold text-green-400">{taskDetails.github.branch.comparison.aheadBy}</p>
-                          </div>
-                          <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                            <p className="text-xs text-zinc-500 mb-1 flex items-center gap-1">
-                              <ArrowDown size={12} className="text-orange-400" />
-                              Behind
-                            </p>
-                            <p className="text-xl font-bold text-orange-400">{taskDetails.github.branch.comparison.behindBy}</p>
-                          </div>
-                          <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                            <p className="text-xs text-zinc-500 mb-1">Files Changed</p>
-                            <p className="text-xl font-bold text-blue-400">{taskDetails.github.branch.comparison.filesChanged}</p>
-                          </div>
-                          <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-3">
-                            <p className="text-xs text-zinc-500 mb-1">Total Commits</p>
-                            <p className="text-xl font-bold text-purple-400">{taskDetails.github.branch.comparison.totalCommits}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Recent Commits */}
-                      {taskDetails.github.branch.commits && taskDetails.github.branch.commits.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-                            <GitCommit size={14} />
-                            Recent Commits ({taskDetails.github.branch.commits.length})
-                          </h4>
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {taskDetails.github.branch.commits.slice(0, 10).map((commit, idx) => (
-                              <div key={commit.sha} className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 hover:border-indigo-500/50 transition-colors">
-                                <div className="flex items-start gap-3">
-                                  <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs text-indigo-400 border border-indigo-500/30 flex-shrink-0 mt-0.5">
-                                    {commit.author.charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <a
-                                      href={commit.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sm text-zinc-300 hover:text-indigo-400 transition-colors block mb-1 line-clamp-2"
-                                    >
-                                      {commit.message.split('\n')[0]}
-                                    </a>
-                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
-                                      <span className="text-zinc-400">{commit.author}</span>
-                                      <span>•</span>
-                                      <span className="font-mono text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded">{commit.sha.substring(0, 7)}</span>
-                                      <span>•</span>
-                                      <span className="flex items-center gap-1">
-                                        <Clock size={10} />
-                                        {formatDate(commit.date)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {taskDetails.github.branch.commits.length === 0 && (
-                        <div className="text-center py-6 text-zinc-500">
-                          <GitCommit size={24} className="mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No commits yet on this branch</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Pull Requests */}
-                  {taskDetails.github.prs.length > 0 && (
-                    <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                        <GitPullRequest size={16} />
-                        Pull Requests ({taskDetails.github.prs.length})
-                      </h3>
-                      <div className="space-y-3">
-                        {taskDetails.github.prs.map((pr) => (
-                          <div key={pr.number} className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 hover:border-indigo-500/50 transition-colors">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-2 flex-1">
-                                {pr.merged ? (
-                                  <CheckCircle2 className="text-purple-400 flex-shrink-0" size={18} />
-                                ) : pr.state === 'open' ? (
-                                  <GitPullRequest className="text-green-400 flex-shrink-0" size={18} />
-                                ) : (
-                                  <X className="text-red-400 flex-shrink-0" size={18} />
-                                )}
-                                <div className="flex-1">
-                                  <a
-                                    href={pr.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-white hover:text-indigo-400 transition-colors font-medium block"
-                                  >
-                                    #{pr.number}: {pr.title}
-                                  </a>
-                                  {pr.reviewScore !== undefined && pr.reviewScore > 0 && (
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-xs text-zinc-500">Review Score:</span>
-                                      <div className="flex items-center gap-1">
-                                        <Award size={12} className={
-                                          pr.reviewScore >= 80 ? 'text-green-400' :
-                                          pr.reviewScore >= 60 ? 'text-yellow-400' :
-                                          'text-orange-400'
-                                        } />
-                                        <span className={`text-sm font-bold ${
-                                          pr.reviewScore >= 80 ? 'text-green-400' :
-                                          pr.reviewScore >= 60 ? 'text-yellow-400' :
-                                          'text-orange-400'
-                                        }`}>
-                                          {pr.reviewScore}/100
-                                        </span>
-                                      </div>
-                                      {pr.reviewSummary && (
-                                        <div className="flex items-center gap-1 text-[10px] text-zinc-600">
-                                          {pr.reviewSummary.approvals > 0 && (
-                                            <span className="text-green-400">✓{pr.reviewSummary.approvals}</span>
-                                          )}
-                                          {pr.reviewSummary.changesRequested > 0 && (
-                                            <span className="text-red-400">✗{pr.reviewSummary.changesRequested}</span>
-                                          )}
-                                          {pr.reviewSummary.comments > 0 && (
-                                            <span className="text-zinc-400">💬{pr.reviewSummary.comments}</span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
-                                pr.merged ? 'bg-purple-500/20 text-purple-300' :
-                                pr.state === 'open' ? 'bg-green-500/20 text-green-300' :
-                                'bg-red-500/20 text-red-300'
-                              }`}>
-                                {pr.merged ? 'Merged' : pr.state}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
-                              <span className="flex items-center gap-1">
-                                <User size={12} />
-                                {pr.author}
-                              </span>
-                              <span className="text-green-400">+{pr.additions}</span>
-                              <span className="text-red-400">-{pr.deletions}</span>
-                              <span>{pr.changedFiles} files</span>
-                              <span className="flex items-center gap-1">
-                                <Clock size={12} />
-                                {formatDate(pr.updatedAt)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Issue Details */}
-                  {taskDetails.github.issue && (
-                    <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                        <Github size={16} />
-                        GitHub Issue Details
-                      </h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="text-zinc-500">State:</span>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            taskDetails.github.issue.state === 'open' 
-                              ? 'bg-green-500/20 text-green-300' 
-                              : 'bg-purple-500/20 text-purple-300'
-                          }`}>
-                            {taskDetails.github.issue.state}
-                          </span>
-                        </div>
-                        {taskDetails.github.issue.commentsCount > 0 && (
-                          <div className="flex items-center gap-2 text-sm text-zinc-400">
-                            <MessageSquare size={16} />
-                            <span>{taskDetails.github.issue.commentsCount} comments</span>
-                          </div>
-                        )}
-                        {taskDetails.github.issue.comments?.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            <p className="text-xs text-zinc-500 uppercase tracking-wide">Recent Comments</p>
-                            {taskDetails.github.issue.comments.map((comment, idx) => (
-                              <div key={idx} className="bg-zinc-900 border border-zinc-700 rounded-lg p-3">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-xs font-medium text-indigo-400">{comment.author}</span>
-                                  <span className="text-xs text-zinc-600">•</span>
-                                  <span className="text-xs text-zinc-500">{formatDate(comment.createdAt)}</span>
-                                </div>
-                                <p className="text-sm text-zinc-300 line-clamp-3">{comment.body}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Timestamps */}
-              <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-zinc-500 mb-1">Created</p>
-                    <p className="text-zinc-300">{formatDate(taskDetails.createdAt)}</p>
+              {/* ═══ DESCRIPTION + TIMELINE ═══ */}
+              <div className="tsec" style={{ display:'grid', gridTemplateColumns:taskDetails.description?'1fr 1fr':'1fr', gap:14 }}>
+                {taskDetails.description && (
+                  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                    <Hdr icon={FileCode} title="Description"/>
+                    <p style={{ fontSize:13, color:C.text, margin:0, lineHeight:1.6, whiteSpace:'pre-wrap' }}>{taskDetails.description}</p>
                   </div>
-                  <div>
-                    <p className="text-zinc-500 mb-1">Last Updated</p>
-                    <p className="text-zinc-300">{formatDate(taskDetails.updatedAt)}</p>
+                )}
+                <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:18 }}>
+                  <Hdr icon={Clock} title="Timeline"/>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {[['Created',taskDetails.createdAt],['Updated',taskDetails.updatedAt],taskDetails.dueDate&&['Due Date',taskDetails.dueDate]].filter(Boolean).map(([lb,dt],i)=>(
+                      <div key={i} style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+                        <span style={{ color:C.muted }}>{lb}</span>
+                        <span style={{ color:lb==='Due Date'&&timeRemaining?.overdue?C.red:C.text, fontWeight:500 }}>{fmtDate(dt)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -657,3 +552,4 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
 };
 
 export default TaskDetailModal;
+
