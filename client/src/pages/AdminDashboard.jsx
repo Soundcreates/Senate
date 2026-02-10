@@ -154,6 +154,24 @@ const AdminDashboard = () => {
                         <p style={{ fontSize: '14px', color: '#a9927d', margin: '4px 0 0' }}>
                             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
+                        {/* Build Button */}
+                        <button
+                            onClick={() => navigate('/admin')}
+                            style={{
+                                marginTop: '16px',
+                                border: '1px solid #a9927d',
+                                background: '#a9927d',
+                                color: 'white',
+                                borderRadius: '8px',
+                                padding: '8px 18px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(169,146,125,0.08)'
+                            }}
+                        >
+                            Go to Build
+                        </button>
                     </div>
                     <button
                         onClick={handleLogout}

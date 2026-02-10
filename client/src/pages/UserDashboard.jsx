@@ -207,7 +207,7 @@ const UserDashboard = () => {
         () => Math.max(1, ...wakatimeData.map((entry) => entry.hours || 0)),
         [wakatimeData]
     );
-    const projectCards = useMemo(() => {
+   const projectCards = useMemo(() => {
         return projects.map((project) => {
             const tasks = projectTasks[project._id] || [];
             const completed = tasks.filter((task) => task.status === 'done').length;
