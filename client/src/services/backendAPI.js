@@ -1,6 +1,6 @@
 import axios from "axios";
 
 export const server = await axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: "https://senate-qiog.onrender.com",
   withCredentials: true,
 });
