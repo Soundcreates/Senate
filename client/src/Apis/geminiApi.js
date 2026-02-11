@@ -1,4 +1,4 @@
-const BASE_API = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BASE_API = import.meta.env.VITE_BACKEND_URL || "https://senate-qiog.onrender.com"
 
 export const splitTasks = async (payload) => {
   const response = await fetch(`${BASE_API}/api/gemini/split-tasks`, {

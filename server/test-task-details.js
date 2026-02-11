@@ -7,7 +7,7 @@ if (!projectId || !taskId) {
   process.exit(1);
 }
 
-const url = `http://localhost:5000/api/projects/${projectId}/tasks/${taskId}/details`;
+const url = `https://senate-qiog.onrender.com/api/projects/${projectId}/tasks/${taskId}/details`;
 
 console.log(`Testing: ${url}`);
 

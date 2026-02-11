@@ -12,7 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 const allowedOrigins = [
-  "http://localhost:5173",
+  "https://senate-qiog.onrender.com",
   "https://senate-ojiz.vercel.app",
 ];
 app.use(

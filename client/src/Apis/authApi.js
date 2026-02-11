@@ -1,4 +1,4 @@
-const BASE_API = "http://localhost:3000";
+const BASE_API="https://senate-qiog.onrender.com";
 
 export const registerDeveloper = async ({ email, password, name }) => {
   const response = await fetch(`${BASE_API}/api/auth/developer/register`, {

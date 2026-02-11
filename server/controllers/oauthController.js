@@ -17,7 +17,7 @@ const buildRedirectUri = (req) =>
 	`${req.protocol}://${req.get("host")}/api/oauth/wakatime-redirect`;
 
 const buildClientRedirectUrl = (params = {}, path = "/login") => {
-	const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
+	const baseUrl = process.env.CLIENT_URL || "https://senate-qiog.onrender.com";
 	const redirectUrl = new URL(path, baseUrl);
 
 	Object.entries(params).forEach(([key, value]) => {

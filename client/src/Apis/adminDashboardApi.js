@@ -1,4 +1,4 @@
-const BASE_API = "http://localhost:3000";
+const BASE_API = "https://senate-qiog.onrender.com"
 
 export const fetchAdminDashboard = async (token) => {
   const response = await fetch(`${BASE_API}/api/admin-dashboard/overview`, {

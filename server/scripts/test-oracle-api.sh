@@ -1,6 +1,6 @@
 #!/bin/bash
 # End-to-end test of all oracle API endpoints
-BASE="http://localhost:3000/api/oracle"
+BASE="https://senate-qiog.onrender.com/api/oracle"
 
 echo "=== 1. GET /api/oracle/status ==="
 curl -s "$BASE/status" | python3 -m json.tool
