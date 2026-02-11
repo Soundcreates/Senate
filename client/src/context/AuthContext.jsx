@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
         }
         setToken(null);
       }
-      const response = await fetch('http://localhost:3000/api/oauth/session', {
+      const response = await fetch('https://senate-qiog.onrender.com/api/oauth/session', {
         method: 'GET',
         credentials: 'include',
         headers: { Accept: 'application/json' },
@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         await logoutAdmin(token);
       } else {
-        await fetch('http://localhost:3000/api/oauth/logout', {
+        await fetch('https://senate-qiog.onrender.com/api/oauth/logout', {
           method: 'POST',
           credentials: 'include',
           headers: { Accept: 'application/json' },

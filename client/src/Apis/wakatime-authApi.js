@@ -1,4 +1,4 @@
-const BASE_API = "http://localhost:3000";
+const BASE_API = "https://senate-qiog.onrender.com"
 
 export const startWakatimeOAuth = (redirectTo) => {
   console.log("OAuth for WakaTime started");
