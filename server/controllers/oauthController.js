@@ -56,7 +56,7 @@ async function HandleWakaTimeOAuth(req, res) {
 			.status(500)
 			.json({ error: "missing_oauth_env", message: "Set WAKATIME_APP_ID and WAKATIME_APP_SECRET." });
 	}
-	
+
 
 	if (error) {
 		return res.status(400).json({ error, errorDescription });
@@ -151,23 +151,48 @@ async function HandleWakaTimeOAuth(req, res) {
 			? new Date(Date.now() + Number(tokenData.expires_in) * 1000)
 			: null;
 
-		const user = await User.findOneAndUpdate(
-			{ email },
-			{
-				name: userData.display_name || userData.username || "WakaTime User",
-				email,
-				avatarUrl: userData.photo || userData.profile_image || null,
-				provider: "wakatime",
-				wakatimeId,
-				wakatimeTokens: {
+		const cookies = parseCookies(req);
+		const userIdFromSession = cookies.session_user;
+
+		let user;
+		if (userIdFromSession) {
+			// Step 1: Link to existing session user if available
+			user = await User.findById(userIdFromSession);
+			if (user) {
+				user.wakatimeId = wakatimeId;
+				user.wakatimeTokens = {
 					accessToken: tokenData.access_token || null,
 					refreshToken: tokenData.refresh_token || null,
 					expiresAt,
 					scope: tokenData.scope || null,
+				};
+				// Update other info if not present
+				if (!user.name) user.name = userData.display_name || userData.username;
+				if (!user.avatarUrl) user.avatarUrl = userData.photo || userData.profile_image;
+				await user.save();
+			}
+		}
+
+		if (!user) {
+			// Step 2: Fallback to existing logic if no session (upsert by email)
+			user = await User.findOneAndUpdate(
+				{ email },
+				{
+					name: userData.display_name || userData.username || "WakaTime User",
+					email,
+					avatarUrl: userData.photo || userData.profile_image || null,
+					provider: "wakatime",
+					wakatimeId,
+					wakatimeTokens: {
+						accessToken: tokenData.access_token || null,
+						refreshToken: tokenData.refresh_token || null,
+						expiresAt,
+						scope: tokenData.scope || null,
+					},
 				},
-			},
-			{ new: true, upsert: true, setDefaultsOnInsert: true }
-		);
+				{ new: true, upsert: true, setDefaultsOnInsert: true }
+			);
+		}
 
 		res.cookie("session_user", user._id.toString(), {
 			httpOnly: true,
@@ -176,7 +201,6 @@ async function HandleWakaTimeOAuth(req, res) {
 			maxAge: 7 * 24 * 60 * 60 * 1000,
 		});
 
-		const cookies = parseCookies(req);
 		const redirectPath = cookies[WAKATIME_REDIRECT_COOKIE] === "register" ? "/register" : "/login";
 		res.clearCookie(WAKATIME_REDIRECT_COOKIE, {
 			httpOnly: true,
@@ -209,9 +233,9 @@ async function HandleGithubOAuth(req, res) {
 	if (error) {
 		return res.status(400).json({ error, errorDescription });
 	}
-
 	const redirectUri = buildGithubRedirectUri(req);
 	const scope = process.env.GITHUB_SCOPES || "read:user user:email";
+	console.log()
 
 	if (!code) {
 		if (redirectTo) {
@@ -314,16 +338,27 @@ async function HandleGithubOAuth(req, res) {
 		const cookies = parseCookies(req);
 		const manualEmailFromCookie = cookies[MANUAL_EMAIL_COOKIE];
 		const roleFromCookie = cookies[ROLE_COOKIE];
+		const userIdFromSession = cookies.session_user;
 		const lookupEmail = manualEmailFromCookie || email;
 
-		const userQuery = lookupEmail
-			? { $or: [{ githubId }, { email: lookupEmail }] }
-			: { githubId };
+		let user;
 
-		const user = await User.findOne(userQuery);
+		// 1. Try to link by current session
+		if (userIdFromSession) {
+			user = await User.findById(userIdFromSession);
+		}
+
+		// 2. If no session, try to find existing user by githubId or email
+		if (!user) {
+			const userQuery = lookupEmail
+				? { $or: [{ githubId }, { email: lookupEmail }] }
+				: { githubId };
+			user = await User.findOne(userQuery);
+		}
+
 		if (!user) {
 			return res.redirect(
-				buildClientRedirectUrl({ oauth: "error", provider: "github", reason: "github_email_missing" }, "/register")
+				buildClientRedirectUrl({ oauth: "error", provider: "github", reason: "user_not_found" }, "/register")
 			);
 		}
 
@@ -391,12 +426,9 @@ async function getSessionUser(req, res) {
 	if (userId) {
 		user = await User.findById(userId).lean();
 	}
-	// DEV BYPASS: fall back to first user in DB when no session
+
 	if (!user) {
-		user = await User.findOne().lean();
-	}
-	if (!user) {
-		return res.status(401).json({ error: "no_users_in_db" });
+		return res.status(401).json({ error: "unauthorized" });
 	}
 
 	return res.status(200).json({

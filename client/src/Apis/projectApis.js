@@ -1,4 +1,4 @@
-const BASE_API = "https://senate-qiog.onrender.com"
+const BASE_API = "http://localhost:3000"
 
 export const createProject = async (name) => {
   const response = await fetch(`${BASE_API}/api/projects/create`, {

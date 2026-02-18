@@ -103,6 +103,9 @@ const Dashboard = () => {
       if (session?.user?.role === 'admin') return;
 
       const { start, end } = buildWeekRange();
+      if(user.role === "admin"){
+
+
       const wakaResult = await fetchWakatimeStats({ start, end });
       if (wakaResult.ok) {
         const series = parseWakaTimeSeries(wakaResult.data);
@@ -110,6 +113,9 @@ const Dashboard = () => {
         const latest = series[series.length - 1];
         setTodayHours(latest?.completed || 0);
       }
+    }else{
+      console.log("Not fetching waka time stats for an admin");
+    }
 
       const projectResult = await listProjects();
       if (projectResult.ok) {

@@ -33,12 +33,9 @@ const uploadResume = async (req, res) => {
   if (userId) {
     user = await User.findById(userId);
   }
-  // DEV BYPASS: fall back to first user in DB when no session
+
   if (!user) {
-    user = await User.findOne();
-  }
-  if (!user) {
-    return res.status(401).json({ error: "no_users_in_db" });
+    return res.status(401).json({ error: "unauthorized" });
   }
 
   try {

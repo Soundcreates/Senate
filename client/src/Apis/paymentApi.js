@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || "https://senate-qiog.onrender.com";
+const API_URL = "http://localhost:3000";
 
 
 // Configure axios to include credentials

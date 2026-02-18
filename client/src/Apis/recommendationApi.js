@@ -1,4 +1,4 @@
-const BASE_API = "https://senate-qiog.onrender.com"
+const BASE_API = "http://localhost:3000"
 
 /**
  * Get recommendations from the RAG endpoint

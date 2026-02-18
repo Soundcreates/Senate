@@ -34,7 +34,9 @@ const getBearerToken = (req) => {
 };
 
 async function registerAdmin(req, res) {
+	console.log("Register admin endpoint hit");
 	if (!JWT_SECRET) {
+
 		return res.status(500).json({ error: "missing_jwt_secret" });
 	}
 	const { email, password, name } = req.body || {};
@@ -57,6 +59,7 @@ async function registerAdmin(req, res) {
 		passwordHash,
 	});
 
+	setSessionCookie(res, user._id);
 	const token = signToken(user);
 	return res.status(201).json({
 		ok: true,

@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 import { fetchAdminProfile, logoutAdmin } from '@/Apis/admin-authApi';
 import { useNavigate } from 'react-router-dom';
+
+
+const BASE_URL="http://localhost:3000"
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
@@ -90,7 +93,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         await logoutAdmin(token);
       } else {
-        await fetch('https://senate-qiog.onrender.com/api/oauth/logout', {
+        await fetch(`${BASE_URL}/api/auth/me/logout`, {
           method: 'POST',
           credentials: 'include',
           headers: { Accept: 'application/json' },

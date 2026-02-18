@@ -15,7 +15,7 @@ export async function submitToVectorDB(profileData) {
         }
 
         const response = await fetch(
-            'https://antdev.app.n8n.cloud/webhook/bbd71201-1fa2-40e3-84b2-563ab983efe1',
+            'http://localhost:3000',
             {
                 method: 'POST',
                 body: formData,

@@ -14,6 +14,7 @@ const MONGO_URI = process.env.MONGO_URI;
 const allowedOrigins = [
   "https://senate-qiog.onrender.com",
   "https://senate-ojiz.vercel.app",
+  "http://localhost:5173",
 ];
 app.use(
   cors({

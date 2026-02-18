@@ -95,8 +95,15 @@ const Register = () => {
     };
 
     const handleGithubConnect = () => {
-        const email = role === 'admin' ? adminEmail.trim() : manualEmail.trim();
-        startGithubLogin(email, "register", role);
+        // Always use the email relevant to the role
+        let email = '';
+        if (roleChoice === 'admin') {
+            email = adminEmail.trim();
+        } else {
+            email = manualEmail.trim() || developerEmail.trim();
+        }
+        // Always pass the roleChoice for clarity
+        startGithubLogin(email, "register", roleChoice);
     };
 
     const handleRoleContinue = () => {
@@ -109,6 +116,7 @@ const Register = () => {
     };
 
     const handleAdminRegister = async () => {
+        console.log("Using handleAdminRegister");
         if (isSubmittingAdmin) return;
         const trimmedEmail = adminEmail.trim().toLowerCase();
         if (!trimmedEmail || !adminPassword) {
@@ -122,7 +130,7 @@ const Register = () => {
 
         setAdminError('');
         setIsSubmittingAdmin(true);
-        const result = await registerAdmin({ email: trimmedEmail, password: adminPassword, name: 'Admin' });
+        const result = await registerAdmin({ email: trimmedEmail, password: adminPassword, name: fullName.trim() || 'Admin' });
         if (!result.ok) {
             setAdminError(result.error === 'email_in_use' ? 'Email already in use.' : 'Registration failed.');
             setIsSubmittingAdmin(false);
@@ -135,7 +143,9 @@ const Register = () => {
         try {
             localStorage.setItem('register.email', trimmedEmail);
             localStorage.setItem('register.role', 'admin');
-        } catch (_e) {}
+        } catch (_e) {
+            // ignore storage failures
+        }
         setAdminStep(2);
         setIsSubmittingAdmin(false);
     };
@@ -143,8 +153,8 @@ const Register = () => {
     const handleDeveloperRegister = async () => {
         if (isSubmittingDeveloper) return;
         const trimmedEmail = developerEmail.trim().toLowerCase();
-        if (!trimmedEmail || !developerPassword) {
-            setDeveloperError('Email and password are required.');
+        if (!fullName.trim() || !trimmedEmail || !developerPassword) {
+            setDeveloperError('All fields are required.');
             return;
         }
         if (developerPassword !== developerPasswordConfirm) {
@@ -154,7 +164,7 @@ const Register = () => {
 
         setDeveloperError('');
         setIsSubmittingDeveloper(true);
-        const result = await registerDeveloper({ email: trimmedEmail, password: developerPassword, name: trimmedEmail });
+        const result = await registerDeveloper({ email: trimmedEmail, password: developerPassword, name: fullName.trim() });
         if (!result.ok) {
             setDeveloperError(result.error === 'email_in_use' ? 'Email already in use.' : 'Registration failed.');
             setIsSubmittingDeveloper(false);
@@ -165,10 +175,11 @@ const Register = () => {
         setManualEmail(trimmedEmail);
         try {
             localStorage.setItem('register.email', trimmedEmail);
+            localStorage.setItem('register.role', 'developer');
         } catch (_error) {
             // ignore storage failures
         }
-        setStep(2);
+        setStep(2); // Step 2 is now GitHub
     };
 
     const handleResumeUpload = (event) => {
@@ -205,6 +216,8 @@ const Register = () => {
     };
 
     const handleCompleteRegistration = async () => {
+
+        console.log("Using handleCompleteRegistration");
         if (!resumeFile || isUploadingResume) return;
         setResumeError('');
         setIsUploadingResume(true);
@@ -236,7 +249,7 @@ const Register = () => {
     const getProgress = () => {
         if (roleChoice === 'admin') return (adminStep / 2) * 100;
         if (roleChoice !== 'developer') return 0;
-        return (step / 5) * 100;
+        return (step / 4) * 100;
     };
 
     useEffect(() => {
@@ -266,27 +279,28 @@ const Register = () => {
 
                 // Check if this was an admin GitHub connection
                 let storedRole = null;
-                try { storedRole = localStorage.getItem('register.role'); } catch (_e) {}
+                try { storedRole = localStorage.getItem('register.role'); } catch (_e) { }
 
                 if (provider === 'github' && storedRole === 'admin') {
                     try {
                         localStorage.removeItem('register.email');
                         localStorage.removeItem('register.role');
-                    } catch (_e) {}
+                    } catch (_e) {
+                        // ignore storage failures
+                    }
                     navigate('/dashboard');
                     return;
                 }
 
                 if (provider === 'wakatime') {
-                    setStep(3);
+                    setStep(4); // Developer: WakaTime -> Step 4
                 }
                 if (provider === 'github') {
-                    try {
-                        localStorage.removeItem('register.email');
-                    } catch (_error) {
-                        // ignore storage failures
+                    if (roleChoice === 'admin' || storedRole === 'admin') {
+                        navigate('/admin-dashboard');
+                        return;
                     }
-                    setStep(4);
+                    setStep(3); // Developer: GitHub -> Step 3
                 }
                 // Clean up URL
                 const newUrl = window.location.pathname;
@@ -323,7 +337,7 @@ const Register = () => {
                         {roleChoice === 'admin'
                             ? `Step ${adminStep} of 2: ${adminStep === 1 ? 'Create Account' : 'Connect GitHub'}`
                             : roleChoice === 'developer'
-                                ? `Step ${step} of 5: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect WakaTime' : step === 3 ? 'Connect GitHub' : step === 4 ? 'Profile Details' : 'Upload Resume'}`
+                                ? `Step ${step} of 4: ${step === 1 ? 'Create Account' : step === 2 ? 'Connect GitHub' : step === 3 ? 'Connect WakaTime' : 'Profile & Resume'}`
                                 : 'Choose your role to begin'}
                     </p>
                 </div>
@@ -364,6 +378,14 @@ const Register = () => {
                     {roleChoice === 'admin' && adminStep === 1 && (
                         <div className="space-y-5">
                             <div className="space-y-4">
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Full name</label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(event) => setFullName(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="John Doe"
+                                />
                                 <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Admin email</label>
                                 <input
                                     type="email"
@@ -413,7 +435,7 @@ const Register = () => {
                                 className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
                             >
                                 <div className="text-lg font-semibold mb-1 font-['Jost']">Connect GitHub</div>
-                                <div className="text-sm text-[#a9927d]">Required for repository management</div>
+                                <div className="text-sm text-[#a9927d]">Required for project management</div>
                             </button>
                             <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
                                 Connect your GitHub account to manage repositories and track developer contributions.
@@ -424,6 +446,14 @@ const Register = () => {
                     {roleChoice === 'developer' && step === 1 && (
                         <div className="space-y-5">
                             <div className="space-y-4">
+                                <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Full name</label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(event) => setFullName(event.target.value)}
+                                    className="w-full rounded-xl bg-[#fbf7ef] border border-[#a9927d]/10 px-4 py-3 text-[#2d2a26] placeholder-[#a9927d]/50 focus:outline-none focus:ring-2 focus:ring-[#a9927d]/20 focus:border-[#a9927d] transition-all font-['Jost']"
+                                    placeholder="John Doe"
+                                />
                                 <label className="block text-sm text-[#5e503f] text-left font-['Jost']">Email</label>
                                 <input
                                     type="email"
@@ -456,7 +486,7 @@ const Register = () => {
                                     disabled={isSubmittingDeveloper}
                                     className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
                                 >
-                                    {isSubmittingDeveloper ? 'Creating account...' : 'Continue to WakaTime'}
+                                    {isSubmittingDeveloper ? 'Creating account...' : 'Continue to GitHub'}
                                 </button>
                             </div>
                         </div>
@@ -468,6 +498,26 @@ const Register = () => {
                             <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
                                 <span className="text-sm text-[#a9927d]">✓ Account Created</span>
                             </div>
+                            <button
+                                onClick={handleGithubConnect}
+                                className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
+                            >
+                                <div className="text-lg font-semibold mb-1 font-['Jost']">Connect GitHub</div>
+                                <div className="text-sm text-[#a9927d]">Import repositories & contributions</div>
+                            </button>
+                            <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
+                                Connect GitHub to analyze your contributions.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Step 3: GitHub */}
+                    {roleChoice === 'developer' && step === 3 && (
+                        <div className="space-y-5">
+                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
+                                <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
+                            </div>
+
                             <button
                                 onClick={handleWakatimeConnect}
                                 className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
@@ -481,93 +531,50 @@ const Register = () => {
                         </div>
                     )}
 
-                    {/* Step 3: GitHub */}
-                    {roleChoice === 'developer' && step === 3 && (
+                    {/* Step 4: Profile Details */}
+                    {roleChoice === 'developer' && step === 4 && (
                         <div className="space-y-5">
                             <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
                                 <span className="text-sm text-[#a9927d]">✓ WakaTime Connected</span>
                             </div>
 
-                            <button
-                                onClick={handleGithubConnect}
-                                className="w-full bg-[#fbf7ef] hover:bg-[#f0eadd] text-[#2d2a26] py-4 px-6 rounded-xl font-medium transition-all text-center border border-[#a9927d]/20"
-                            >
-                                <div className="text-lg font-semibold mb-1 font-['Jost']">Connect GitHub</div>
-                                <div className="text-sm text-[#a9927d]">Import repositories & contributions</div>
-                            </button>
-                            {githubConnected && (
-                                <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
-                                    <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
-                                </div>
-                            )}
-                            <button
-                                onClick={() => setStep(4)}
-                                disabled={!githubConnected}
-                                className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
-                            >
-                                Continue
-                            </button>
-                            <p className="text-sm text-center text-[#5e503f] leading-relaxed font-['Jost']">
-                                Connect GitHub to analyze your contributions.
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Step 4: Profile Details */}
-                    {roleChoice === 'developer' && step === 4 && (
-                        <div className="space-y-5">
-                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
-                                <span className="text-sm text-[#a9927d]">✓ GitHub Connected</span>
-                            </div>
-                            
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Full Name *</label>
-                                    <input
-                                        type="text"
-                                        value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
-                                        placeholder="Enter your full name"
-                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Role *</label>
-                                    <select
-                                        value={developerRole}
-                                        onChange={(e) => setDeveloperRole(e.target.value)}
-                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
-                                    >
-                                        <option value="developer">developer</option>
-                                        <option value="hr">hr</option>
-                                        <option value="legal">legal</option>
-                                        <option value="finance">finance</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Experience Tier *</label>
-                                    <select
-                                        value={tier}
-                                        onChange={(e) => setTier(e.target.value)}
-                                        className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
-                                    >
-                                        <option value="intern">intern</option>
-                                        <option value="junior">junior</option>
-                                        <option value="senior">senior</option>
-                                    </select>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Role *</label>
+                                        <select
+                                            value={developerRole}
+                                            onChange={(e) => setDeveloperRole(e.target.value)}
+                                            className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
+                                        >
+                                            <option value="developer">developer</option>
+                                            <option value="hr">hr</option>
+                                            <option value="legal">legal</option>
+                                            <option value="finance">finance</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Experience *</label>
+                                        <select
+                                            value={tier}
+                                            onChange={(e) => setTier(e.target.value)}
+                                            className="w-full px-4 py-3 bg-[#fbf7ef] border border-[#a9927d]/20 rounded-xl focus:outline-none focus:border-[#a9927d] transition-colors font-['Jost']"
+                                        >
+                                            <option value="intern">intern</option>
+                                            <option value="junior">junior</option>
+                                            <option value="senior">senior</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <div>
                                     <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Wallet Address *</label>
                                     {isWalletConnected && walletAddress ? (
                                         <div className="flex items-center gap-3">
-                                            <div className="flex-1 px-4 py-3 bg-[#fbf7ef] border border-green-300 rounded-xl font-['Jost'] font-mono text-sm text-[#2d2a26] flex items-center gap-2">
+                                            <div className="flex-1 px-4 py-3 bg-[#fbf7ef] border border-green-300 rounded-xl font-['Jost'] font-mono text-sm text-[#2d2a26] flex items-center gap-2 overflow-hidden text-ellipsis">
                                                 <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                                                {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                                                {walletAddress}
                                             </div>
-                                            <span className="text-xs text-green-600 font-['Jost']">Connected</span>
                                         </div>
                                     ) : (
                                         <button
@@ -580,62 +587,47 @@ const Register = () => {
                                         </button>
                                     )}
                                 </div>
+
+                                <div>
+                                    <label className="block text-sm text-[#5e503f] mb-2 font-['Jost']">Resume (PDF) *</label>
+                                    <div
+                                        className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors cursor-pointer"
+                                        onClick={() => resumeInputRef.current?.click()}
+                                        onDragOver={handleResumeDragOver}
+                                        onDrop={handleResumeDrop}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                resumeInputRef.current?.click();
+                                            }
+                                        }}
+                                    >
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            id="resume-upload"
+                                            onChange={handleResumeUpload}
+                                            accept="application/pdf"
+                                            ref={resumeInputRef}
+                                        />
+                                        <label htmlFor="resume-upload" className="cursor-pointer text-[#5e503f] font-['Jost']">
+                                            {resumeFile ? resumeFile.name : 'Click or drag to upload resume'}
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
-                            {profileError && (
-                                <p className="text-sm text-red-500 text-center">{profileError}</p>
-                            )}
+                            {resumeError && <p className="text-sm text-red-500 text-center">{resumeError}</p>}
+                            {profileError && <p className="text-sm text-red-500 text-center">{profileError}</p>}
 
-                            <button
-                                onClick={handleProfileContinue}
-                                className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all font-['Jost'] shadow-lg shadow-[#a9927d]/20"
-                            >
-                                Continue to Resume Upload
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Step 5: Resume */}
-                    {roleChoice === 'developer' && step === 5 && (
-                        <div className="space-y-5">
-                            <div className="bg-[#fbf7ef] rounded-xl p-4 text-center border border-[#a9927d]/10">
-                                <span className="text-sm text-[#a9927d]">✓ Profile Complete</span>
-                            </div>
-                            <div
-                                className="border-2 border-dashed border-[#a9927d]/30 rounded-xl p-6 text-center bg-[#fbf7ef]/50 hover:bg-[#fbf7ef] transition-colors cursor-pointer"
-                                onClick={() => resumeInputRef.current?.click()}
-                                onDragOver={handleResumeDragOver}
-                                onDrop={handleResumeDrop}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        resumeInputRef.current?.click();
-                                    }
-                                }}
-                            >
-                                <input
-                                    type="file"
-                                    className="hidden"
-                                    id="resume-upload"
-                                    onChange={handleResumeUpload}
-                                    accept="application/pdf"
-                                    ref={resumeInputRef}
-                                />
-                                <label htmlFor="resume-upload" className="cursor-pointer text-[#5e503f] font-['Jost']">
-                                    {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
-                                </label>
-                            </div>
-                            {resumeError && (
-                                <p className="text-sm text-red-500 text-center">{resumeError}</p>
-                            )}
                             <button
                                 onClick={handleCompleteRegistration}
-                                disabled={!resumeFile || isUploadingResume}
+                                disabled={!resumeFile || isUploadingResume || !walletAddress}
                                 className="w-full bg-[#a9927d] hover:bg-[#8c7a6b] text-white py-3 px-6 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed font-['Jost'] shadow-lg shadow-[#a9927d]/20"
                             >
-                                {isUploadingResume ? 'Uploading...' : 'Complete Registration'}
+                                {isUploadingResume ? 'Completing...' : 'Complete Registration'}
                             </button>
                         </div>
                     )}

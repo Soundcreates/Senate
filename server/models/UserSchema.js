@@ -26,6 +26,11 @@ const UserSchema = new mongoose.Schema(
     resume: {type: String, default: null},
     walletAddress: {type: String , default: null},
     projects: [{ type: mongoose.Schema.Types.ObjectId, ref: "Project" }],
+    cookie: {
+      value: { type: String, default: null },
+      timeToLive: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) },
+      issuedAt: {type: Date,default: Date.now},
+    }
   },
   { timestamps: true }
 );
