@@ -9,7 +9,6 @@ import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authAp
 import { uploadResume } from '@/Apis/resumeApi';
 import { registerAdmin } from '@/Apis/admin-authApi';
 import { registerDeveloper } from '@/Apis/authApi';
-import { submitToVectorDB } from '@/Apis/vectorDbApi';
 
 const Register = () => {
     const containerRef = useRef(null);
@@ -215,19 +214,6 @@ const Register = () => {
             setResumeError('Resume upload failed. Please try again.');
             setIsUploadingResume(false);
             return;
-        }
-
-        // Then, submit to vector database workflow
-        const vectorDbResult = await submitToVectorDB({
-            name: fullName.trim(),
-            role: developerRole,
-            tier: tier,
-            walletAddress: walletAddress.trim(),
-            resume: resumeFile
-        });
-
-        if (!vectorDbResult.ok) {
-            console.warn('Vector DB submission failed, but continuing registration');
         }
 
         navigate('/dashboard');

@@ -1,6 +1,8 @@
 const cloudinary = require("../services/cloudinary");
 const User = require("../models/UserSchema");
 
+const PYTHON_URL = process.env.PYTHON_URL || "http://127.0.0.1:8000";
+
 const parseCookies = (req) => {
   const raw = req.headers.cookie;
   if (!raw) return {};
@@ -28,17 +30,13 @@ const uploadResume = async (req, res) => {
 
   const cookies = parseCookies(req);
   const userId = cookies.session_user;
+  if (!userId) {
+    return res.status(401).json({ error: "unauthorized_session" });
+  }
 
-  let user;
-  if (userId) {
-    user = await User.findById(userId);
-  }
-  // DEV BYPASS: fall back to first user in DB when no session
+  const user = await User.findById(userId);
   if (!user) {
-    user = await User.findOne();
-  }
-  if (!user) {
-    return res.status(401).json({ error: "no_users_in_db" });
+    return res.status(401).json({ error: "user_not_found" });
   }
 
   try {
@@ -50,16 +48,46 @@ const uploadResume = async (req, res) => {
 
     user.resume = uploadResult.secure_url;
     await user.save();
-
+    await sendToVectorDB(uploadResult.secure_url, user._id.toString());
     return res.status(200).json({ ok: true, resumeUrl: uploadResult.secure_url });
   } catch (error) {
-    console.error("Cloudinary resume upload failed:", {
+    console.error("Resume pipeline failed:", {
       message: error.message,
       code: error.code,
       http_code: error.http_code,
     });
-    return res.status(502).json({ error: "resume_upload_failed" });
+    const errorCode = String(error?.message || "").includes("vector_db")
+      ? "resume_ingestion_failed"
+      : "resume_upload_failed";
+    return res.status(502).json({ error: errorCode });
   }
 };
 
+const sendToVectorDB = async (resumeUrl, userId) => {
+  console.log("Sending to vector db");
+  try{
+    const response = await fetch(`${PYTHON_URL}/ingest-resume`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ resumeUrl, userId })
+    });
+    console.log("Sending data: ", JSON.stringify({ resumeUrl, userId }));
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => "");
+      throw new Error(`vector_db_http_${response.status}: ${responseText}`);
+    }
+
+    const data = await response.json();
+    if (data.status !== "ok") {
+      throw new Error(`vector_db_invalid_response: ${JSON.stringify(data)}`);
+    }
+    console.log("Successfully sent resume to vector db");
+  } catch (error) {
+    console.error("Failed to send resume to vector db:", error);
+    throw new Error(`vector_db_failure: ${error.message}`);
+  }
+};
 module.exports = { uploadResume };

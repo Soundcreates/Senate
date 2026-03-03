@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 # -------- Daily Score --------
 
@@ -35,3 +35,8 @@ class ELOUpdateResponse(BaseModel):
     old_rating: float
     rating_change: float
     new_rating: float
+
+
+class ResumeIngestRequest(BaseModel):
+    resumeUrl: str
+    userId: Optional[str] = None
