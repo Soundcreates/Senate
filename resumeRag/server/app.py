@@ -22,6 +22,7 @@ app = FastAPI(title="Employee Scoring Service")
 
 @app.post("/ingest-resume")
 async def ingest_resume(req: ResumeIngestRequest):
+    print("User id: ", req.userId)
     effective_user_id = req.userId or "anonymous"
     resume_dir = await load_resume(req.resumeUrl)
     run_ingestion(
