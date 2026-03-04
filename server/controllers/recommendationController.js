@@ -1,6 +1,8 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-const RAG_ENDPOINT = "https://antdev.app.n8n.cloud/webhook/39138e4f-df12-434d-8be7-19e06c40121d";
+const RAG_BASE_URL = (process.env.PYTHON_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const RAG_ENDPOINT = `${RAG_BASE_URL}/get-recommendations`;
+const RAG_HEALTH_ENDPOINT = `${RAG_BASE_URL}/health`;
 
 /**
  * Get recommendations from the RAG endpoint
@@ -59,12 +61,12 @@ async function getRecommendations(req, res) {
       console.error(`[Recommendation] Error details:`, errorDetails);
       console.error(`[Recommendation] Request payload:`, JSON.stringify(payload, null, 2));
       
-      // Check for specific n8n errors
+      // Check for common upstream errors
       let userMessage = `RAG endpoint returned ${response.status}`;
       if (errorDetails.includes('Unused Respond to Webhook node')) {
-        userMessage = 'n8n workflow configuration error: Unused Respond to Webhook node. Please check your n8n workflow setup.';
+        userMessage = 'RAG workflow configuration error: Unused Respond to Webhook node.';
       } else if (response.status === 404) {
-        userMessage = 'RAG webhook not active. Please activate the n8n workflow.';
+        userMessage = 'RAG endpoint not found. Check your FastAPI service URL and route configuration.';
       }
       
       // Return 200 with error flag so frontend can fallback gracefully
@@ -84,11 +86,11 @@ async function getRecommendations(req, res) {
     console.log(`[Recommendation] RAG Response keys:`, Object.keys(recommendations || {}));
     console.log(`[Recommendation] RAG Response:`, JSON.stringify(recommendations, null, 2));
 
-    // Extract the actual data from n8n response
-    // n8n might return: { data: [...] } or just [...] or { people: [...] }
+    // Extract the actual data from upstream response
+    // Upstream might return: { data: [...] } or just [...] or { people: [...] }
     let extractedData = recommendations;
     
-    // If n8n wraps the response in a 'data' field, unwrap it
+    // If upstream wraps the response in a 'data' field, unwrap it
     if (recommendations && recommendations.data && typeof recommendations.data === 'object') {
       extractedData = recommendations.data;
       console.log(`[Recommendation] Extracted nested data:`, JSON.stringify(extractedData, null, 2));
@@ -127,16 +129,11 @@ async function checkRAGHealth(req, res) {
   try {
     const startTime = Date.now();
     
-    const response = await fetch(RAG_ENDPOINT, {
-      method: 'POST',
+    const response = await fetch(RAG_HEALTH_ENDPOINT, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        query: "health check",
-        context: { type: "ping" }
-      }),
       timeout: 10000
     });
 
@@ -147,7 +144,7 @@ async function checkRAGHealth(req, res) {
       status: response.ok ? "healthy" : "unhealthy",
       responseCode: response.status,
       responseTime: `${responseTime}ms`,
-      endpoint: RAG_ENDPOINT,
+      endpoint: RAG_HEALTH_ENDPOINT,
       timestamp: new Date().toISOString()
     });
 
@@ -156,7 +153,7 @@ async function checkRAGHealth(req, res) {
     return res.status(503).json({
       status: "unhealthy",
       error: error.message,
-      endpoint: RAG_ENDPOINT,
+      endpoint: RAG_HEALTH_ENDPOINT,
       timestamp: new Date().toISOString()
     });
   }

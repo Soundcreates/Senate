@@ -180,6 +180,20 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
 - `POST /score/daily`
 - `POST /rating/update`
+- `POST /get-recommendations` with JSON payload:
+
+```json
+{
+	"query": "Find team members for a React + Node project",
+	"context": {
+		"projectDescription": "Build a task tracking platform",
+		"teamSize": 3,
+		"type": "team_recommendation"
+	},
+	"userId": "optional-user-id",
+	"timestamp": "optional-iso-datetime"
+}
+```
 
 ## Smart Contracts
 

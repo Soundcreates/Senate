@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 # -------- Daily Score --------
 
@@ -40,3 +40,9 @@ class ELOUpdateResponse(BaseModel):
 class ResumeIngestRequest(BaseModel):
     resumeUrl: str
     userId: Optional[str] = None
+
+class GetRecommendationsRequest(BaseModel):
+    query: str
+    context: Dict[str, Any] | str | None = None
+    userId: Optional[str] = None
+    timestamp: Optional[str] = None

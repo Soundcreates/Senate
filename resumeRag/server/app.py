@@ -1,5 +1,7 @@
-from fastapi import FastAPI
 from uuid import uuid4
+from fastapi import FastAPI, HTTPException
+
+from ingest import run_ingestion
 from server.computeDailyScore import compute_daily_score
 from server.computeElo import update_ratings_after_completion
 from server.models import (
@@ -7,18 +9,18 @@ from server.models import (
     DailyScoreResponse,
     ELOUpdateRequest,
     ELOUpdateResponse,
-    ResumeIngestRequest
+    ResumeIngestRequest,
+    GetRecommendationsRequest
 )
-from tempfile import TemporaryFile
-from  ingest import (
-    run_ingestion
-)
-
-
+from server.recommendation_service import fetch_recommendations
 from server.resume_service import load_resume
+
 app = FastAPI(title="Employee Scoring Service")
 
-#creating a chroma collection only once
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "resume-rag"}
 
 @app.post("/ingest-resume")
 async def ingest_resume(req: ResumeIngestRequest):
@@ -33,6 +35,29 @@ async def ingest_resume(req: ResumeIngestRequest):
     )
     print("Ingestion completed for resume at:", resume_dir)
     return {"status": "ok", "message": "Resume ingested successfully"}
+
+@app.post("/get-recommendations")
+async def get_recommendations(req: GetRecommendationsRequest):
+    print("Getting recommendations from our vector database")
+    try:
+        recommendations = fetch_recommendations(
+            query=req.query,
+            context=req.context,
+            user_id=req.userId,
+            limit=5,
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "recommendations": recommendations,
+                "count": len(recommendations),
+            },
+            "timestamp": req.timestamp,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Recommendation pipeline failed: {exc}") from exc
+
 
 # ---------------- Daily Score ----------------
 
