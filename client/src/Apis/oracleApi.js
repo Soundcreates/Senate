@@ -1,4 +1,4 @@
-const BASE = "http://localhost:3000";
+const BASE = "https://senate-qiog.onrender.com";
 
 /**
  * Get oracle status / address

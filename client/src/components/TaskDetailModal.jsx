@@ -88,7 +88,7 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
     const fetchTaskDetails = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:3000/api/projects/${projectId}/tasks/${task._id}/details`, { credentials: 'include' });
+        const res = await fetch(`https://senate-qiog.onrender.com/api/projects/${projectId}/tasks/${task._id}/details`, { credentials: 'include' });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || 'Failed to fetch'); }
         setTaskDetails((await res.json()).task);
       } catch (err) { setError(err.message);

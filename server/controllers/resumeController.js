@@ -1,7 +1,7 @@
 const cloudinary = require("../services/cloudinary");
 const User = require("../models/UserSchema");
 
-const PYTHON_URL = process.env.PYTHON_URL || "http://127.0.0.1:8000";
+const PYTHON_URL = process.env.PYTHON_URL || "https://senate-rag.onrender.com";
 
 const parseCookies = (req) => {
   const raw = req.headers.cookie;

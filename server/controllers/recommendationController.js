@@ -1,6 +1,6 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-const RAG_BASE_URL = (process.env.PYTHON_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+const RAG_BASE_URL = (process.env.PYTHON_URL || "https://senate-rag.onrender.com").replace(/\/+$/, "");
 const RAG_ENDPOINT = `${RAG_BASE_URL}/get-recommendations`;
 const RAG_HEALTH_ENDPOINT = `${RAG_BASE_URL}/health`;
 

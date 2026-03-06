@@ -74,7 +74,7 @@ MONGO_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 
 CLIENT_URL=http://localhost:5173
-PYTHON_URL=http://127.0.0.1:8000
+PYTHON_URL=https://senate-rag.onrender.com
 
 # Cloudinary
 CLOUDINARY_URL=your_cloudinary_url
@@ -93,8 +93,8 @@ GITHUB_SCOPES=repo read:user user:email
 # GITHUB_APP_ORG=your_org_login
 
 # Optional explicit redirect URIs
-# WAKATIME_REDIRECT_URI=http://localhost:3000/api/oauth/wakatime-redirect
-# GITHUB_REDIRECT_URI=http://localhost:3000/api/oauth/github-redirect
+# WAKATIME_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/wakatime-redirect
+# GITHUB_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/github-redirect
 ```
 
 ### 2) Resume service env (`resumeRag/.env`)
@@ -111,7 +111,7 @@ CHROMA_HOST=api.trychroma.com
 ### 3) Frontend env (`client/.env`)
 
 ```dotenv
-VITE_BACKEND_URL=http://localhost:3000
+VITE_BACKEND_URL=https://senate-qiog.onrender.com
 ```
 
 > Never commit real secrets. Use placeholder values for shared examples.
@@ -158,8 +158,8 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 ## Service URLs
 
 - Frontend: `http://localhost:5173`
-- Backend (Express): `http://localhost:3000`
-- Resume service (FastAPI): `http://localhost:8000`
+- Backend (Express): `https://senate-qiog.onrender.com`
+- Resume service (FastAPI): `https://senate-rag.onrender.com`
 
 ## API Overview
 

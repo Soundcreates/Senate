@@ -2,7 +2,7 @@
 
 ## 🚀 Quick Start
 
-**Backend**: http://localhost:3000 ✅ (running)  
+**Backend**: https://senate-qiog.onrender.com ✅ (running)  
 **Frontend**: http://localhost:5174 ✅ (running)  
 **Oracle Address**: `0x4C3F5a84041E562928394d63b3E339bE70DBcC17` ✅ (whitelisted)
 
@@ -80,7 +80,7 @@ export ESCROW_ADDRESS="0x..." # Replace with your deployed escrow
 
 # Submit scores for milestone 0
 # Make sure the addresses match your actual contributors
-curl -X POST http://localhost:3000/api/oracle/submit-scores \
+curl -X POST https://senate-qiog.onrender.com/api/oracle/submit-scores \
   -H "Content-Type: application/json" \
   -d '{
     "escrowAddress": "'$ESCROW_ADDRESS'",
@@ -159,7 +159,7 @@ curl -X POST http://localhost:3000/api/oracle/submit-scores \
 
 **Or use backend**:
 ```bash
-curl -X POST http://localhost:3000/api/oracle/finalize \
+curl -X POST https://senate-qiog.onrender.com/api/oracle/finalize \
   -H "Content-Type: application/json" \
   -d '{
     "escrowAddress": "'$ESCROW_ADDRESS'",
@@ -225,7 +225,7 @@ curl -X POST http://localhost:3000/api/oracle/finalize \
 **Oracle endpoints failing**:
 - Check server logs: `lsof -ti:3000 | xargs kill -9 && cd server && node app.js`
 - Verify `.env` has `ORACLE_PRIVATE_KEY` and `SEPOLIA_RPC_URL`
-- Test: `curl http://localhost:3000/api/oracle/status`
+- Test: `curl https://senate-qiog.onrender.com/api/oracle/status`
 
 ---
 
