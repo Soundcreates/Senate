@@ -13,13 +13,14 @@ const TokenSchema = new mongoose.Schema(
 const UserSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: { type: String, required: true, unique: false, lowercase: true, trim: true   },
     role: { type: String, enum: ["admin", "developer"], default: "developer" },
     passwordHash: { type: String, default: null },
     avatarUrl: { type: String, trim: true },
     provider: { type: String, trim: true },
     githubId: { type: String, trim: true },
     githubUsername: { type: String, trim: true },
+    githubUrls: { type: Map, of: String, default: () => ({}) },
     wakatimeId: { type: String, trim: true },
     wakatimeTokens: { type: TokenSchema, default: () => ({}) },
     githubTokens: { type: TokenSchema, default: () => ({}) },
