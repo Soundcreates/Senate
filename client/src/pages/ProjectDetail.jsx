@@ -45,8 +45,9 @@ const ProjectDetail = () => {
     const [escrow, setEscrow] = useState(null);
     const [escrowLoading, setEscrowLoading] = useState(false);
     const [showDeployModal, setShowDeployModal] = useState(false);
-    const { isConnected, shortenAddress: shorten, getExplorerUrl } = useWalletContext();
+    const { shortenAddress: shorten, getExplorerUrl } = useWalletContext();
     const { user } = useAuth();
+    const MotionDiv = motion.div;
 
     // Task detail modal state
     const [selectedTask, setSelectedTask] = useState(null);
@@ -143,19 +144,26 @@ const ProjectDetail = () => {
     }
 
     /* derived data */
-    const totalHours = (project.tasks || []).reduce((sum, t) => sum + (t.estimatedHours || 0), 0);
-    const totalTasks = (project.tasks || []).length;
-    const completedTasks = (project.tasks || []).filter(t => t.status === 'done').length;
-    const inProgressCount = (project.tasks || []).filter(t => t.status === 'in_progress').length;
-    const todoCount = (project.tasks || []).filter(t => t.status === 'todo').length;
-    const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const projectTasks = project.tasks || [];
+    const cs = completionStats;
+    const completionTaskBreakdown = cs?.taskBreakdown || [];
+    const completionTaskMap = completionTaskBreakdown.reduce((acc, taskRow) => {
+        acc[String(taskRow.id)] = taskRow;
+        return acc;
+    }, {});
+
+    const totalHours = cs?.velocity?.estimatedTotalHours ?? projectTasks.reduce((sum, taskRow) => sum + (taskRow.estimatedHours || 0), 0);
+    const totalTasks = cs?.totalTasks ?? projectTasks.length;
+    const completedTasks = cs?.doneTasks ?? projectTasks.filter(taskRow => taskRow.status === 'done').length;
+    const inProgressCount = cs?.inProgressTasks ?? projectTasks.filter(taskRow => taskRow.status === 'in_progress').length;
+    const todoCount = cs?.todoTasks ?? projectTasks.filter(taskRow => taskRow.status === 'todo').length;
+    const progressPercent = cs?.taskPercent ?? (totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0);
     const teamMembers = project.team || [];
     const projectStatus = getStatusColor(project.status);
 
-    const totalCodedHours = Object.values(codingStats).reduce((sum, s) => sum + (s.totalHours || 0), 0);
+    const totalCodedHours = cs?.coding?.totalHours7d ?? Object.values(codingStats).reduce((sum, memberStat) => sum + (memberStat.totalHours || 0), 0);
 
     // Build display-ready completion data — use API data when available, otherwise derive from project
-    const cs = completionStats;
     const seed = [...(project.name || 'proj')].reduce((s, c) => s + c.charCodeAt(0), 0);
 
     const fallbackCommitsByDay = (() => {
@@ -177,11 +185,11 @@ const ProjectDetail = () => {
         totalCommits7d: fallbackTotal7d,
         commitsByDay: fallbackCommitsByDay,
         openIssues: Math.max(0, todoCount + inProgressCount),
-        closedIssues: completedTasks + ((seed * 3) % 5),
-        mergedPRs: Math.max(1, completedTasks),
+        closedIssues: completedTasks,
+        mergedPRs: completedTasks,
         openPRs: Math.max(0, inProgressCount),
-        linesAdded: fallbackTotal7d * (120 + (seed % 80)),
-        linesRemoved: Math.round(fallbackTotal7d * (30 + (seed % 40))),
+        linesAdded: 0,
+        linesRemoved: 0,
         contributors: teamSize,
     };
 
@@ -197,7 +205,7 @@ const ProjectDetail = () => {
         avgPerDay: parseFloat((fallbackCodingTotal / 7).toFixed(1)),
     };
 
-    const completedEstHours = (project.tasks || []).filter(t => t.status === 'done').reduce((s, t) => s + (t.estimatedHours || 0), 0);
+    const completedEstHours = projectTasks.filter(taskRow => taskRow.status === 'done').reduce((sum, taskRow) => sum + (taskRow.estimatedHours || 0), 0);
     const remainingHrs = Math.max(0, totalHours - completedEstHours);
     const pacePerDay = displayCoding.avgPerDay || 1;
     const estDaysLeft = pacePerDay > 0 ? Math.ceil(remainingHrs / pacePerDay) : null;
@@ -286,14 +294,14 @@ const ProjectDetail = () => {
                         { label: 'Tasks', value: `${completedTasks}/${totalTasks}`, icon: CheckCircle2 },
                         { label: 'Progress', value: progressPercent, icon: TrendingUp, suffix: '%' },
                     ].map((stat, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                        <MotionDiv key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                             style={{ background: 'white', borderRadius: '12px', padding: '16px', border: '1px solid rgba(169, 146, 125, 0.15)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                                 <stat.icon size={18} style={{ color: '#a9927d' }} />
                                 <span style={{ fontSize: '13px', color: '#5e503f' }}>{stat.label}</span>
                             </div>
                             <p style={{ fontSize: '24px', fontWeight: '600', color: stat.color || '#2d2a26', margin: 0 }}>{stat.value}{stat.suffix || ''}</p>
-                        </motion.div>
+                        </MotionDiv>
                     ))}
                 </div>
 
@@ -326,7 +334,7 @@ const ProjectDetail = () => {
                                             <div>
                                                 {codingStatsLoading ? (
                                                     <Loader2 size={14} className="animate-spin" style={{ color: '#a9927d', margin: '0 auto' }} />
-                                                ) : codingStats[member.name] ? (
+                                                ) : codingStats[member.name]?.connected ? (
                                                     <>
                                                         <p style={{ fontSize: '16px', fontWeight: '600', color: '#2563eb', margin: 0 }}>
                                                             {codingStats[member.name].totalHours}h
@@ -356,12 +364,32 @@ const ProjectDetail = () => {
                                 <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Tasks ({totalTasks})</h3>
                             </div>
                             <div style={{ padding: '8px 0' }}>
-                                {(project.tasks || []).length === 0 && (
+                                {projectTasks.length === 0 && (
                                     <p style={{ padding: '16px 20px', fontSize: '13px', color: '#a9927d' }}>No tasks created yet.</p>
                                 )}
-                                {(project.tasks || []).map((task, i) => {
-                                    const tStatus = statusLabel(task.status);
-                                    const tColor = getStatusColor(task.status);
+                                {projectTasks.map((task, i) => {
+                                    const taskMetrics = completionTaskMap[String(task._id)] || null;
+                                    const taskStatus = taskMetrics?.status || task.status;
+                                    const tStatus = statusLabel(taskStatus);
+                                    const tColor = getStatusColor(taskStatus);
+                                    const assigneeNames = taskMetrics?.assignees?.length
+                                        ? taskMetrics.assignees
+                                        : (task.assignees || []).map((assignee) => (typeof assignee === 'string' ? assignee : assignee?.name)).filter(Boolean);
+                                    const taskCodingHours = taskMetrics?.coding?.totalHours7d ?? assigneeNames.reduce((sum, assigneeName) => {
+                                        const memberStats = codingStats[assigneeName];
+                                        return sum + (memberStats?.connected ? (memberStats.totalHours || 0) : 0);
+                                    }, 0);
+                                    const taskPrCount = taskMetrics?.github?.prCount || 0;
+                                    const taskMergedPrs = taskMetrics?.github?.mergedPRs || 0;
+                                    const deadlineInfo = taskMetrics?.deadline || null;
+                                    const deadlineLabel = deadlineInfo?.status === 'overdue'
+                                        ? `Overdue ${deadlineInfo.overdueDays}d`
+                                        : deadlineInfo?.status === 'at_risk'
+                                            ? `${deadlineInfo.daysRemaining}d left`
+                                            : deadlineInfo?.status === 'on_track'
+                                                ? `${deadlineInfo.daysRemaining}d left`
+                                                : '';
+
                                     return (
                                         <div 
                                             key={task._id || i} 
@@ -370,27 +398,22 @@ const ProjectDetail = () => {
                                                 display: 'flex', 
                                                 alignItems: 'center', 
                                                 padding: '12px 20px', 
-                                                borderBottom: i < project.tasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none',
+                                                borderBottom: i < projectTasks.length - 1 ? '1px solid rgba(169, 146, 125, 0.08)' : 'none',
                                                 cursor: 'pointer',
                                                 transition: 'background 0.2s'
                                             }}
                                             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(169, 146, 125, 0.05)'}
                                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                         >
-                                            {task.status === 'done' ? <CheckCircle2 size={16} style={{ color: '#16a34a', marginRight: '12px' }} /> : <Circle size={16} style={{ color: '#a9927d', marginRight: '12px' }} />}
+                                            {taskStatus === 'done' ? <CheckCircle2 size={16} style={{ color: '#16a34a', marginRight: '12px' }} /> : <Circle size={16} style={{ color: '#a9927d', marginRight: '12px' }} />}
                                             <div style={{ flex: 1 }}>
                                                 <p style={{ fontSize: '14px', fontWeight: '500', color: '#2d2a26', margin: 0 }}>{task.title}</p>
                                                 <p style={{ fontSize: '11px', color: '#a9927d', margin: '2px 0 0' }}>
-                                                    {(task.assignees || []).map(a => a.name).join(', ') || 'Unassigned'} • {task.estimatedHours || 0}h est.
-                                                    {task.priority && ` • ${task.priority}`}
-                                                    {(() => {
-                                                        const assigneeNames = (task.assignees || []).map(a => a.name).filter(Boolean);
-                                                        const taskCodingHours = assigneeNames.reduce((sum, name) => {
-                                                            const s = codingStats[name];
-                                                            return sum + (s ? s.totalHours : 0);
-                                                        }, 0);
-                                                        return taskCodingHours > 0 ? ` • ${taskCodingHours}h coded` : '';
-                                                    })()}
+                                                    {assigneeNames.join(', ') || 'Unassigned'} • {(taskMetrics?.estimatedHours ?? task.estimatedHours ?? 0)}h est.
+                                                    {(taskMetrics?.priority || task.priority) && ` • ${taskMetrics?.priority || task.priority}`}
+                                                    {taskCodingHours > 0 ? ` • ${Number(taskCodingHours).toFixed(1)}h coded` : ''}
+                                                    {taskPrCount > 0 ? ` • PR ${taskMergedPrs}/${taskPrCount}` : ''}
+                                                    {deadlineLabel ? ` • ${deadlineLabel}` : ''}
                                                 </p>
                                             </div>
                                             <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px', background: tColor.bg, color: tColor.text, fontWeight: '500' }}>{tStatus}</span>
@@ -413,7 +436,9 @@ const ProjectDetail = () => {
                                         try {
                                             const data = await getEscrowData(project.escrowAddress);
                                             setEscrow(data);
-                                        } catch (_) {}
+                                        } catch (escrowError) {
+                                            console.error('Escrow refresh failed:', escrowError);
+                                        }
                                     }}
                                 />
                             </div>
@@ -467,7 +492,7 @@ const ProjectDetail = () => {
                                     <span style={{ fontSize: '13px', fontWeight: '600', color: '#2d2a26' }}>{progressPercent}%</span>
                                 </div>
                                 <div style={{ height: '8px', background: 'rgba(169, 146, 125, 0.2)', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <motion.div initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} transition={{ duration: 0.8, ease: 'easeOut' }}
+                                    <MotionDiv initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} transition={{ duration: 0.8, ease: 'easeOut' }}
                                         style={{ height: '100%', background: progressPercent === 100 ? '#16a34a' : 'linear-gradient(90deg, #a9927d, #5e503f)', borderRadius: '4px' }} />
                                 </div>
                             </div>
@@ -484,7 +509,7 @@ const ProjectDetail = () => {
                                         </span>
                                     </div>
                                     <div style={{ height: '6px', background: 'rgba(169, 146, 125, 0.15)', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <motion.div initial={{ width: 0 }} animate={{ width: `${displayTimeline.timelinePercent}%` }} transition={{ duration: 0.8 }}
+                                        <MotionDiv initial={{ width: 0 }} animate={{ width: `${displayTimeline.timelinePercent}%` }} transition={{ duration: 0.8 }}
                                             style={{ height: '100%', borderRadius: '3px', background: displayTimeline.timelinePercent > 80 ? (progressPercent >= 80 ? '#16a34a' : '#dc2626') : '#2563eb' }} />
                                     </div>
                                 </div>
@@ -727,7 +752,11 @@ const ProjectDetail = () => {
                 project={project}
                 onDeployed={(addr) => {
                     setProject(prev => ({ ...prev, escrowAddress: addr }));
-                    getEscrowData(addr).then(data => setEscrow(data)).catch(() => {});
+                    getEscrowData(addr)
+                        .then((data) => setEscrow(data))
+                        .catch((escrowError) => {
+                            console.error('Escrow reload failed:', escrowError);
+                        });
                 }}
             />
 

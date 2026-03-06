@@ -1,8 +1,20 @@
 const Project = require("../models/Project");
 const ProjectDailyStats = require("../models/ProjectDailyStats");
+const Task = require("../models/Task");
 const User = require("../models/UserSchema");
-const { getTodayCommits } = require("../services/githubService");
-const { createIssue, checkCollaborator, addCollaborator, assignIssue, createRepo, createLabel, setupCopilotWorkflow, createBranch } = require("../services/githubService");
+const {
+	getTodayCommits,
+	createIssue,
+	checkCollaborator,
+	addCollaborator,
+	assignIssue,
+	createRepo,
+	createLabel,
+	setupCopilotWorkflow,
+	createBranch,
+	fetchGitHubJson,
+	getPullRequestsForIssue,
+} = require("../services/githubService");
 const { storeTodayStats } = require("../services/projectStatsService");
 
 const parseCookies = (req) => {
@@ -25,6 +37,188 @@ const getSessionUser = async (req) => {
 	}
 	// DEV BYPASS: fall back to first user in DB when no session
 	return User.findOne();
+};
+
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildRecentDateKeys = (days = 7, endDate = new Date()) => {
+	const dateKeys = [];
+	for (let dayIndex = days - 1; dayIndex >= 0; dayIndex -= 1) {
+		const dateCursor = new Date(endDate);
+		dateCursor.setDate(dateCursor.getDate() - dayIndex);
+		dateKeys.push(dateCursor.toISOString().slice(0, 10));
+	}
+	return dateKeys;
+};
+
+const normalizeWakaTimeDaySeries = (rawDays, dateKeys) => {
+	const totalsByDate = {};
+	(rawDays || []).forEach((dayEntry) => {
+		const dateKey = dayEntry?.range?.date;
+		if (!dateKey) return;
+		const totalSeconds = Number(dayEntry?.grand_total?.total_seconds || 0);
+		totalsByDate[dateKey] = (totalsByDate[dateKey] || 0) + totalSeconds;
+	});
+
+	return dateKeys.map((dateKey) => ({
+		date: dateKey,
+		hours: parseFloat(((totalsByDate[dateKey] || 0) / 3600).toFixed(1)),
+	}));
+};
+
+const sumDayHours = (daySeries = []) =>
+	parseFloat(
+		daySeries.reduce((sum, dayEntry) => sum + (Number(dayEntry?.hours) || 0), 0).toFixed(1),
+	);
+
+const resolveTaskAssignees = (taskEntry = {}) =>
+	(taskEntry.assignees || [])
+		.map((assignee) => (typeof assignee === "string" ? assignee : assignee?.name))
+		.map((name) => (name || "").trim())
+		.filter(Boolean);
+
+const collectProjectMemberNames = (project, taskRows = []) => {
+	const memberNames = new Set();
+	(project?.team || []).forEach((member) => {
+		if (member?.name) {
+			memberNames.add(String(member.name).trim());
+		}
+	});
+
+	(taskRows || []).forEach((taskEntry) => {
+		resolveTaskAssignees(taskEntry).forEach((memberName) => memberNames.add(memberName));
+	});
+
+	return [...memberNames];
+};
+
+const getSafeDate = (value) => {
+	if (!value) return null;
+	const parsedDate = new Date(value);
+	return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const buildTaskDeadlineSnapshot = (taskStatus, dueDateValue, nowDate = new Date()) => {
+	const normalizedStatus = String(taskStatus || "").toLowerCase();
+	if (!dueDateValue) {
+		return {
+			status: normalizedStatus === "done" || normalizedStatus === "completed" ? "completed" : "no_deadline",
+			dueDate: null,
+			daysRemaining: null,
+			overdueDays: 0,
+		};
+	}
+
+	const dueDate = getSafeDate(dueDateValue);
+	if (!dueDate) {
+		return {
+			status: "no_deadline",
+			dueDate: null,
+			daysRemaining: null,
+			overdueDays: 0,
+		};
+	}
+
+	const daysDelta = Math.ceil((dueDate - nowDate) / (1000 * 60 * 60 * 24));
+	if (normalizedStatus === "done" || normalizedStatus === "completed") {
+		return {
+			status: "completed",
+			dueDate: dueDate.toISOString().slice(0, 10),
+			daysRemaining: Math.max(0, daysDelta),
+			overdueDays: daysDelta < 0 ? Math.abs(daysDelta) : 0,
+		};
+	}
+
+	if (daysDelta < 0) {
+		return {
+			status: "overdue",
+			dueDate: dueDate.toISOString().slice(0, 10),
+			daysRemaining: 0,
+			overdueDays: Math.abs(daysDelta),
+		};
+	}
+
+	return {
+		status: daysDelta <= 2 ? "at_risk" : "on_track",
+		dueDate: dueDate.toISOString().slice(0, 10),
+		daysRemaining: daysDelta,
+		overdueDays: 0,
+	};
+};
+
+const findUserByMemberName = async (memberName) => {
+	const safeName = (memberName || "").trim();
+	if (!safeName) return null;
+
+	const exactPattern = new RegExp(`^${escapeRegex(safeName)}$`, "i");
+	return User.findOne({
+		$or: [{ name: { $regex: exactPattern } }, { githubUsername: { $regex: exactPattern } }],
+	});
+};
+
+const fetchMemberCodingStats = async (memberNames, startDate, endDate, dateKeys) => {
+	const { fetchTimeStats } = require("../services/wakatime-stats");
+	const uniqueMemberNames = [...new Set((memberNames || []).map((name) => (name || "").trim()).filter(Boolean))];
+
+	const memberStats = await Promise.all(
+		uniqueMemberNames.map(async (memberName) => {
+			const memberUser = await findUserByMemberName(memberName);
+			if (!memberUser?.wakatimeTokens?.accessToken) {
+				return {
+					name: memberName,
+					connected: false,
+					totalHours: 0,
+					dailyAverage: 0,
+					lastSevenDays: dateKeys.map((dateKey) => ({ date: dateKey, hours: 0 })),
+				};
+			}
+
+			try {
+				const timeStats = await fetchTimeStats(memberUser.wakatimeTokens.accessToken, startDate, endDate);
+				const normalizedDays = normalizeWakaTimeDaySeries(timeStats?.data || [], dateKeys);
+				const totalHours = sumDayHours(normalizedDays);
+
+				return {
+					name: memberName,
+					connected: true,
+					totalHours,
+					dailyAverage: parseFloat((totalHours / Math.max(dateKeys.length, 1)).toFixed(1)),
+					lastSevenDays: normalizedDays,
+				};
+			} catch (error) {
+				console.error(`[CodingStats] WakaTime fetch failed for ${memberName}:`, error.message);
+				return {
+					name: memberName,
+					connected: false,
+					totalHours: 0,
+					dailyAverage: 0,
+					lastSevenDays: dateKeys.map((dateKey) => ({ date: dateKey, hours: 0 })),
+					error: error.message,
+				};
+			}
+		}),
+	);
+
+	return memberStats;
+};
+
+const aggregateCodingDaySeries = (memberStats, dateKeys) => {
+	const totalsByDate = dateKeys.reduce((accumulator, dateKey) => {
+		accumulator[dateKey] = 0;
+		return accumulator;
+	}, {});
+
+	(memberStats || []).forEach((memberStat) => {
+		(memberStat?.lastSevenDays || []).forEach((dayEntry) => {
+			if (!(dayEntry?.date in totalsByDate)) return;
+			totalsByDate[dayEntry.date] += Number(dayEntry?.hours || 0);
+		});
+	});
+
+	return dateKeys.map((dateKey) => ({
+		date: dateKey,
+		hours: parseFloat((totalsByDate[dateKey] || 0).toFixed(1)),
+	}));
 };
 
 const createProject = async (req, res) => {
@@ -173,7 +367,6 @@ const createFullProject = async (req, res) => {
 		});
 
 		// Create Task documents FIRST to get their IDs
-		const Task = require("../models/Task");
 		const createdTasks = [];
 		
 		// We need to create a project first to get the project ID for tasks
@@ -610,87 +803,18 @@ const getProjectCodingStats = async (req, res) => {
 			return res.status(404).json({ error: "project_not_found" });
 		}
 
-		// Collect all unique member names from team + task assignees
-		const memberNames = new Set();
-		(project.team || []).forEach(m => { if (m.name) memberNames.add(m.name); });
-		(project.tasks || []).forEach(t => {
-			(t.assignees || []).forEach(a => {
-				const n = typeof a === 'string' ? a : a.name;
-				if (n) memberNames.add(n);
-			});
-		});
+		const dateKeys = buildRecentDateKeys(7);
+		const startStr = dateKeys[0];
+		const endStr = dateKeys[dateKeys.length - 1];
 
-		const { fetchTimeStats } = require("../services/wakatime-stats");
-
-		// Date range: last 7 days
-		const end = new Date();
-		const start = new Date();
-		start.setDate(end.getDate() - 7);
-		const startStr = start.toISOString().slice(0, 10);
-		const endStr = end.toISOString().slice(0, 10);
-
-		const statsPromises = [...memberNames].map(async (name) => {
-			const user = await User.findOne({
-				$or: [
-					{ name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-					{ githubUsername: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-				],
-			});
-
-			const hasWakatime = user && user.wakatimeTokens?.accessToken;
-
-			if (hasWakatime) {
-				try {
-					const stats = await fetchTimeStats(user.wakatimeTokens.accessToken, startStr, endStr);
-					const days = stats?.data || [];
-					const totalSeconds = days.reduce((sum, day) => sum + (day.grand_total?.total_seconds || 0), 0);
-					const totalHours = parseFloat((totalSeconds / 3600).toFixed(1));
-
-					return {
-						name,
-						connected: true,
-						totalHours,
-						dailyAverage: parseFloat((totalHours / 7).toFixed(1)),
-						lastSevenDays: days.map(day => ({
-							date: day.range?.date,
-							hours: parseFloat(((day.grand_total?.total_seconds || 0) / 3600).toFixed(1)),
-						})),
-					};
-				} catch (err) {
-					console.error(`[CodingStats] WakaTime fetch failed for ${name}, falling back to mock:`, err.message);
-				}
-			}
-
-			// Generate coding time data for member
-			const seed = [...name].reduce((s, c) => s + c.charCodeAt(0), 0);
-			const mockDays = [];
-			for (let d = 6; d >= 0; d--) {
-				const date = new Date(end);
-				date.setDate(date.getDate() - d);
-				// Pseudorandom hours between 1-8, weighted by the name seed + day
-				const dayVal = (seed * (d + 1) * 7 + d * 13) % 100;
-				const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-				const hours = isWeekend
-					? parseFloat((dayVal % 4 + 0.5).toFixed(1))
-					: parseFloat((dayVal % 6 + 2).toFixed(1));
-				mockDays.push({ date: date.toISOString().slice(0, 10), hours });
-			}
-			const mockTotal = parseFloat(mockDays.reduce((s, d) => s + d.hours, 0).toFixed(1));
-
-			return {
-				name,
-				connected: true,
-				totalHours: mockTotal,
-				dailyAverage: parseFloat((mockTotal / 7).toFixed(1)),
-				lastSevenDays: mockDays,
-			};
-		});
-
-		const memberStats = await Promise.all(statsPromises);
+		const memberNames = collectProjectMemberNames(project, project.tasks || []);
+		const memberStats = await fetchMemberCodingStats(memberNames, startStr, endStr, dateKeys);
 
 		// Build a lookup by name for quick access
 		const statsByName = {};
-		memberStats.forEach(s => { statsByName[s.name] = s; });
+		memberStats.forEach((memberStat) => {
+			statsByName[memberStat.name] = memberStat;
+		});
 
 		return res.status(200).json({ ok: true, memberStats, statsByName });
 	} catch (error) {
@@ -719,204 +843,358 @@ const getProjectCompletionStats = async (req, res) => {
 			return res.status(404).json({ error: "project_not_found" });
 		}
 
-		const tasks = project.tasks || [];
-		const totalTasks = tasks.length;
-		const doneTasks = tasks.filter(t => ["done", "completed"].includes(String(t.status || "").toLowerCase())).length;
-		const inProgressTasks = tasks.filter(t => t.status === "in_progress").length;
-		const todoTasks = tasks.filter(t => t.status === "todo").length;
-		const taskPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+		const projectTasksById = new Map(
+			(project.tasks || []).map((taskEntry) => [String(taskEntry._id), taskEntry]),
+		);
+		const persistedTasks = await Task.find({ projectId: project._id }).lean();
+		const baseTasks = persistedTasks.length > 0 ? persistedTasks : project.tasks || [];
 
-		// ---- Timeline / Deadline progress ----
-		const createdAtCandidate = project.createdAt ? new Date(project.createdAt) : new Date();
-		const createdAt = Number.isNaN(createdAtCandidate.getTime()) ? new Date() : createdAtCandidate;
-		const now = new Date();
-		let deadlineDate = null;
-		let daysRemaining = null;
-		let daysElapsed = Math.max(1, Math.round((now - createdAt) / (1000 * 60 * 60 * 24)));
-		let timelinePercent = null;
-		let deadlineDateIso = null;
+		const normalizedTasks = baseTasks.map((taskEntry) => {
+			const taskId = String(taskEntry._id);
+			const projectTask = projectTasksById.get(taskId) || {};
+			const rawStatus = String(taskEntry.status || projectTask.status || "todo")
+				.toLowerCase()
+				.replace(/\s+/g, "_");
+			const status = rawStatus === "completed" ? "done" : rawStatus;
+			const estimatedHours = Number(taskEntry.estimatedHours ?? projectTask.estimatedHours ?? 0) || 0;
+			const assignees = resolveTaskAssignees({
+				assignees:
+					Array.isArray(taskEntry.assignees) && taskEntry.assignees.length > 0
+						? taskEntry.assignees
+						: projectTask.assignees || [],
+			});
 
-		if (project.deadline) {
-			const parsedDeadline = new Date(project.deadline);
-			if (!isNaN(parsedDeadline.getTime())) {
-				deadlineDate = parsedDeadline;
-				deadlineDateIso = parsedDeadline.toISOString().slice(0, 10);
-				const totalDuration = deadlineDate - createdAt;
-				const elapsed = now - createdAt;
-				daysRemaining = Math.max(0, Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24)));
-				timelinePercent = totalDuration > 0 ? Math.min(100, Math.round((elapsed / totalDuration) * 100)) : 100;
-			}
-		}
+			return {
+				id: taskId,
+				title: taskEntry.title || projectTask.title || "Untitled Task",
+				description: taskEntry.description || projectTask.description || "",
+				status,
+				priority: projectTask.priority || taskEntry.priority || "Medium",
+				estimatedHours,
+				dueDate: taskEntry.dueDate || projectTask.dueDate || null,
+				assignees,
+				githubIssueNumber: taskEntry.githubIssueNumber || projectTask.githubIssueNumber || null,
+				githubIssueUrl: taskEntry.githubIssueUrl || projectTask.githubIssueUrl || null,
+				githubBranch: taskEntry.githubBranch || projectTask.githubBranch || null,
+				createdAt: taskEntry.createdAt || project.createdAt,
+				updatedAt: taskEntry.updatedAt || project.updatedAt,
+			};
+		});
 
-		// ---- GitHub stats (real data) ----
-		let githubStats = null;
+		const nowDate = new Date();
+		const createdAt = getSafeDate(project.createdAt) || nowDate;
+		const projectDeadline = getSafeDate(project.deadline);
+		const daysElapsed = Math.max(1, Math.round((nowDate - createdAt) / (1000 * 60 * 60 * 24)));
+		const timelinePercent = projectDeadline
+			? (() => {
+				const totalDuration = projectDeadline - createdAt;
+				if (totalDuration <= 0) return 100;
+				const elapsed = nowDate - createdAt;
+				return Math.min(100, Math.round((elapsed / totalDuration) * 100));
+			})()
+			: null;
+		const daysRemaining = projectDeadline
+			? Math.max(0, Math.ceil((projectDeadline - nowDate) / (1000 * 60 * 60 * 24)))
+			: null;
+
+		const dateKeys = buildRecentDateKeys(7, nowDate);
+		const startDate = dateKeys[0];
+		const endDate = dateKeys[dateKeys.length - 1];
+
+		const memberNames = collectProjectMemberNames(project, normalizedTasks);
+		const memberStats = await fetchMemberCodingStats(memberNames, startDate, endDate, dateKeys);
+		const codingByMemberName = memberStats.reduce((accumulator, memberStat) => {
+			accumulator[String(memberStat.name || "").toLowerCase()] = memberStat;
+			return accumulator;
+		}, {});
+		const codingByDay = aggregateCodingDaySeries(memberStats, dateKeys);
+		const totalCodingHours = sumDayHours(codingByDay);
+		const avgCodingPerDay = parseFloat((totalCodingHours / Math.max(dateKeys.length, 1)).toFixed(1));
+
+		let taskGithubMap = new Map();
+		let githubStats = {
+			totalCommits7d: 0,
+			commitsByDay: dateKeys.map((dateKey) => ({ date: dateKey, count: 0 })),
+			openIssues: 0,
+			closedIssues: 0,
+			mergedPRs: 0,
+			openPRs: 0,
+			linesAdded: 0,
+			linesRemoved: 0,
+			contributors: memberNames.length,
+			repoSize: 0,
+			defaultBranch: "main",
+			taskLinkedPRs: 0,
+			tasksWithPRs: 0,
+			tasksWithMergedPRs: 0,
+		};
+
 		const token = sessionUser.githubTokens?.accessToken;
 		const owner = project.owner;
 		const repo = project.repo;
 
 		if (token && owner && repo) {
 			try {
-				const { fetchGitHubJson } = require("../services/githubService");
-
-				// Fetch repo info, recent commits, and open/closed issues in parallel
-				const sevenDaysAgo = new Date();
-				sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
 				const [repoInfo, recentCommits, closedIssues, openIssues, pullRequests] = await Promise.all([
 					fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}`, token).catch(() => null),
-					fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=100&since=${sevenDaysAgo.toISOString()}`, token).catch(() => []),
-					fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`, token).catch(() => []),
-					fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`, token).catch(() => []),
-					fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=50`, token).catch(() => []),
+					fetchGitHubJson(
+						`https://api.github.com/repos/${owner}/${repo}/commits?per_page=100&since=${new Date(startDate).toISOString()}`,
+						token,
+					).catch(() => []),
+					fetchGitHubJson(
+						`https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`,
+						token,
+					).catch(() => []),
+					fetchGitHubJson(
+						`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`,
+						token,
+					).catch(() => []),
+					fetchGitHubJson(
+						`https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=100`,
+						token,
+					).catch(() => []),
 				]);
 
-				// Commit activity per day (last 7 days)
-				const commitsByDay = {};
-				const commits = Array.isArray(recentCommits) ? recentCommits : [];
-				commits.forEach(c => {
-					const date = c.commit?.author?.date?.slice(0, 10);
-					if (date) {
-						commitsByDay[date] = (commitsByDay[date] || 0) + 1;
+				const commitsByDate = {};
+				const commitRows = Array.isArray(recentCommits) ? recentCommits : [];
+				const contributorNames = new Set();
+				commitRows.forEach((commitEntry) => {
+					const commitDate = commitEntry?.commit?.author?.date?.slice(0, 10);
+					if (commitDate) {
+						commitsByDate[commitDate] = (commitsByDate[commitDate] || 0) + 1;
+					}
+					const contributorName = commitEntry?.author?.login || commitEntry?.commit?.author?.name;
+					if (contributorName) {
+						contributorNames.add(contributorName);
 					}
 				});
-				const last7DaysCommits = [];
-				for (let d = 6; d >= 0; d--) {
-					const date = new Date();
-					date.setDate(date.getDate() - d);
-					const key = date.toISOString().slice(0, 10);
-					last7DaysCommits.push({ date: key, count: commitsByDay[key] || 0 });
+
+				const openIssueRows = (Array.isArray(openIssues) ? openIssues : []).filter((issue) => !issue?.pull_request);
+				const closedIssueRows = (Array.isArray(closedIssues) ? closedIssues : []).filter((issue) => !issue?.pull_request);
+				const issueLookup = new Map();
+				[...openIssueRows, ...closedIssueRows].forEach((issueEntry) => {
+					const issueNumber = Number(issueEntry?.number || 0);
+					if (!issueNumber) return;
+					issueLookup.set(issueNumber, {
+						state: issueEntry?.state || null,
+						url: issueEntry?.html_url || null,
+					});
+				});
+
+				const taskGithubEntries = await Promise.all(
+					normalizedTasks.map(async (taskEntry) => {
+						const issueNumber = Number(taskEntry.githubIssueNumber || 0);
+						if (!issueNumber) {
+							return [
+								taskEntry.id,
+								{
+									hasIssue: false,
+									issueNumber: null,
+									issueUrl: null,
+									issueState: null,
+									prCount: 0,
+									mergedPRs: 0,
+									openPRs: 0,
+									linesAdded: 0,
+									linesRemoved: 0,
+									changedFiles: 0,
+									lastPrAt: null,
+								},
+							];
+						}
+
+						const issueMeta = issueLookup.get(issueNumber) || {};
+						const pullRequestResult = await getPullRequestsForIssue(owner, repo, issueNumber, token);
+						const linkedPullRequests = Array.isArray(pullRequestResult?.prs) ? pullRequestResult.prs : [];
+
+						const mergedPullRequests = linkedPullRequests.filter((pullRequest) => pullRequest?.merged);
+						const openPullRequests = linkedPullRequests.filter((pullRequest) => pullRequest?.state === "open");
+						const latestPrDate = linkedPullRequests
+							.map((pullRequest) => getSafeDate(pullRequest?.updatedAt || pullRequest?.createdAt))
+							.filter(Boolean)
+							.sort((firstDate, secondDate) => secondDate - firstDate)[0];
+
+						return [
+							taskEntry.id,
+							{
+								hasIssue: true,
+								issueNumber,
+								issueUrl: taskEntry.githubIssueUrl || issueMeta.url || null,
+								issueState: issueMeta.state || null,
+								prCount: linkedPullRequests.length,
+								mergedPRs: mergedPullRequests.length,
+								openPRs: openPullRequests.length,
+								linesAdded: linkedPullRequests.reduce(
+									(sum, pullRequest) => sum + (Number(pullRequest?.additions) || 0),
+									0,
+								),
+								linesRemoved: linkedPullRequests.reduce(
+									(sum, pullRequest) => sum + (Number(pullRequest?.deletions) || 0),
+									0,
+								),
+								changedFiles: linkedPullRequests.reduce(
+									(sum, pullRequest) => sum + (Number(pullRequest?.changedFiles) || 0),
+									0,
+								),
+								lastPrAt: latestPrDate ? latestPrDate.toISOString() : null,
+							},
+						];
+					}),
+				);
+
+				taskGithubMap = new Map(taskGithubEntries);
+				const taskGithubRows = [...taskGithubMap.values()].filter((taskGithub) => taskGithub.hasIssue);
+				const repoPullRequests = Array.isArray(pullRequests) ? pullRequests : [];
+				const mergedRepoPullRequests = repoPullRequests.filter((pullRequest) => Boolean(pullRequest?.merged_at));
+				const openRepoPullRequests = repoPullRequests.filter((pullRequest) => pullRequest?.state === "open");
+
+				let linesAdded = taskGithubRows.reduce(
+					(sum, taskGithub) => sum + (Number(taskGithub.linesAdded) || 0),
+					0,
+				);
+				let linesRemoved = taskGithubRows.reduce(
+					(sum, taskGithub) => sum + (Number(taskGithub.linesRemoved) || 0),
+					0,
+				);
+
+				if ((linesAdded === 0 && linesRemoved === 0) && mergedRepoPullRequests.length > 0) {
+					const mergedPullRequestDetails = await Promise.all(
+						mergedRepoPullRequests.slice(0, 10).map(async (pullRequest) => {
+							try {
+								return await fetchGitHubJson(
+									`https://api.github.com/repos/${owner}/${repo}/pulls/${pullRequest.number}`,
+									token,
+								);
+							} catch (_error) {
+								return null;
+							}
+						}),
+					);
+
+					linesAdded = mergedPullRequestDetails.reduce(
+						(sum, pullRequest) => sum + (Number(pullRequest?.additions) || 0),
+						0,
+					);
+					linesRemoved = mergedPullRequestDetails.reduce(
+						(sum, pullRequest) => sum + (Number(pullRequest?.deletions) || 0),
+						0,
+					);
 				}
 
-				// Lines changed (additions/deletions) from recent PRs
-				const prs = Array.isArray(pullRequests) ? pullRequests : [];
-				const mergedPRs = prs.filter(pr => pr.merged_at);
-				const openPRs = prs.filter(pr => pr.state === "open");
-				let totalAdditions = 0;
-				let totalDeletions = 0;
-
-				// Fetch stats for up to 5 most recent merged PRs
-				const prStatsPromises = mergedPRs.slice(0, 5).map(async (pr) => {
-					try {
-						const prDetail = await fetchGitHubJson(`https://api.github.com/repos/${owner}/${repo}/pulls/${pr.number}`, token);
-						return { additions: prDetail.additions || 0, deletions: prDetail.deletions || 0 };
-					} catch { return { additions: 0, deletions: 0 }; }
-				});
-				const prStats = await Promise.all(prStatsPromises);
-				prStats.forEach(s => { totalAdditions += s.additions; totalDeletions += s.deletions; });
-
-				// Unique contributors from commits
-				const contributors = new Set();
-				commits.forEach(c => {
-					const login = c.author?.login || c.commit?.author?.name;
-					if (login) contributors.add(login);
-				});
+				const commitsByDay = dateKeys.map((dateKey) => ({
+					date: dateKey,
+					count: commitsByDate[dateKey] || 0,
+				}));
 
 				githubStats = {
-					totalCommits7d: commits.length,
-					commitsByDay: last7DaysCommits,
-					openIssues: Array.isArray(openIssues) ? openIssues.filter(i => !i.pull_request).length : 0,
-					closedIssues: Array.isArray(closedIssues) ? closedIssues.filter(i => !i.pull_request).length : 0,
-					mergedPRs: mergedPRs.length,
-					openPRs: openPRs.length,
-					linesAdded: totalAdditions,
-					linesRemoved: totalDeletions,
-					contributors: contributors.size,
-					repoSize: repoInfo?.size || 0,
+					totalCommits7d: commitRows.length,
+					commitsByDay,
+					openIssues: openIssueRows.length,
+					closedIssues: closedIssueRows.length,
+					mergedPRs: mergedRepoPullRequests.length,
+					openPRs: openRepoPullRequests.length,
+					linesAdded,
+					linesRemoved,
+					contributors: contributorNames.size || memberNames.length,
+					repoSize: Number(repoInfo?.size) || 0,
 					defaultBranch: repoInfo?.default_branch || "main",
+					taskLinkedPRs: taskGithubRows.reduce(
+						(sum, taskGithub) => sum + (Number(taskGithub.prCount) || 0),
+						0,
+					),
+					tasksWithPRs: taskGithubRows.filter((taskGithub) => taskGithub.prCount > 0).length,
+					tasksWithMergedPRs: taskGithubRows.filter((taskGithub) => taskGithub.mergedPRs > 0).length,
 				};
-			} catch (err) {
-				console.error("[CompletionStats] GitHub fetch error, using fallback:", err.message);
+			} catch (error) {
+				console.error("[CompletionStats] GitHub fetch failed:", error.message);
 			}
 		}
 
-		// Fallback GitHub stats if real fetch failed
-		if (!githubStats) {
-			const seed = [...(project.name || "proj")].reduce((s, c) => s + c.charCodeAt(0), 0);
-			const last7 = [];
-			for (let d = 6; d >= 0; d--) {
-				const date = new Date();
-				date.setDate(date.getDate() - d);
-				const key = date.toISOString().slice(0, 10);
-				const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-				const count = isWeekend ? (seed + d) % 4 : ((seed * (d + 1)) % 8) + 2;
-				last7.push({ date: key, count });
-			}
-			const total7d = last7.reduce((s, d) => s + d.count, 0);
-			const teamSize = (project.team || []).length || 1;
+		const taskBreakdown = normalizedTasks.map((taskEntry) => {
+			const taskGithub = taskGithubMap.get(taskEntry.id) || {
+				hasIssue: Boolean(taskEntry.githubIssueNumber),
+				issueNumber: taskEntry.githubIssueNumber || null,
+				issueUrl: taskEntry.githubIssueUrl || null,
+				issueState: null,
+				prCount: 0,
+				mergedPRs: 0,
+				openPRs: 0,
+				linesAdded: 0,
+				linesRemoved: 0,
+				changedFiles: 0,
+				lastPrAt: null,
+			};
+
+			const inferredStatus =
+				taskEntry.status !== "done" && (taskGithub.mergedPRs > 0 || taskGithub.issueState === "closed")
+					? "done"
+					: taskEntry.status;
+			const normalizedStatus = inferredStatus === "completed" ? "done" : inferredStatus;
+
+			const codingHoursForTask = parseFloat(
+				resolveTaskAssignees(taskEntry)
+					.reduce((sum, assigneeName) => {
+						const memberStat = codingByMemberName[String(assigneeName || "").toLowerCase()];
+						return sum + (Number(memberStat?.totalHours) || 0);
+					}, 0)
+					.toFixed(1),
+			);
+			const deadlineSnapshot = buildTaskDeadlineSnapshot(normalizedStatus, taskEntry.dueDate, nowDate);
+
+			return {
+				id: taskEntry.id,
+				title: taskEntry.title,
+				status: normalizedStatus,
+				priority: taskEntry.priority,
+				estimatedHours: taskEntry.estimatedHours,
+				dueDate: deadlineSnapshot.dueDate,
+				assignees: taskEntry.assignees,
+				deadline: deadlineSnapshot,
+				hasGithubIssue: taskGithub.hasIssue,
+				githubIssueNumber: taskGithub.issueNumber,
+				githubIssueUrl: taskGithub.issueUrl,
+				github: {
+					...taskGithub,
+				},
+				coding: {
+					totalHours7d: codingHoursForTask,
+					avgPerDay: parseFloat((codingHoursForTask / Math.max(dateKeys.length, 1)).toFixed(1)),
+				},
+			};
+		});
+
+		const totalTasks = taskBreakdown.length;
+		const doneTasks = taskBreakdown.filter((taskEntry) => taskEntry.status === "done").length;
+		const inProgressTasks = taskBreakdown.filter((taskEntry) => taskEntry.status === "in_progress").length;
+		const todoTasks = taskBreakdown.filter((taskEntry) => taskEntry.status === "todo").length;
+		const taskPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+		const deadlineSummary = taskBreakdown.reduce(
+			(accumulator, taskEntry) => {
+				const deadlineStatus = taskEntry?.deadline?.status || "no_deadline";
+				accumulator[deadlineStatus] = (accumulator[deadlineStatus] || 0) + 1;
+				return accumulator;
+			},
+			{ completed: 0, on_track: 0, at_risk: 0, overdue: 0, no_deadline: 0 },
+		);
+
+		if (!token || !owner || !repo) {
 			githubStats = {
-				totalCommits7d: total7d,
-				commitsByDay: last7,
-				openIssues: Math.max(0, todoTasks + inProgressTasks - Math.floor(seed % 3)),
-				closedIssues: doneTasks + ((seed * 3) % 5),
-				mergedPRs: Math.max(1, doneTasks),
-				openPRs: Math.max(0, inProgressTasks),
-				linesAdded: total7d * (120 + (seed % 80)),
-				linesRemoved: Math.round(total7d * (30 + (seed % 40))),
-				contributors: teamSize,
-				repoSize: 0,
-				defaultBranch: "main",
+				...githubStats,
+				openIssues: Math.max(githubStats.openIssues, todoTasks + inProgressTasks),
+				closedIssues: Math.max(githubStats.closedIssues, doneTasks),
 			};
 		}
 
-		// ---- WakaTime coding hours (real + fallback) ----
-		let totalCodingHours = 0;
-		let codingByDay = [];
-		const { fetchTimeStats } = require("../services/wakatime-stats");
-		const end = new Date();
-		const start = new Date();
-		start.setDate(end.getDate() - 7);
-		const startStr = start.toISOString().slice(0, 10);
-		const endStr = end.toISOString().slice(0, 10);
-
-		let wakatimeFetched = false;
-		// Try each member until we get WakaTime data
-		const members = project.members || [];
-		for (const member of members) {
-			if (member.wakatimeTokens?.accessToken) {
-				try {
-					const stats = await fetchTimeStats(member.wakatimeTokens.accessToken, startStr, endStr);
-					const days = stats?.data || [];
-					const totalSec = days.reduce((sum, day) => sum + (day.grand_total?.total_seconds || 0), 0);
-					totalCodingHours = parseFloat((totalSec / 3600).toFixed(1));
-					codingByDay = days.map(day => ({
-						date: day.range?.date,
-						hours: parseFloat(((day.grand_total?.total_seconds || 0) / 3600).toFixed(1)),
-					}));
-					wakatimeFetched = true;
-					break;
-				} catch (err) {
-					console.error("[CompletionStats] WakaTime fetch failed:", err.message);
-				}
-			}
-		}
-
-		if (!wakatimeFetched) {
-			// Generate coding hours from commit pattern
-			const commitDays = githubStats.commitsByDay || [];
-			codingByDay = commitDays.map(d => ({
-				date: d.date,
-				hours: parseFloat((d.count * (1.2 + Math.random() * 0.6)).toFixed(1)),
-			}));
-			totalCodingHours = parseFloat(codingByDay.reduce((s, d) => s + d.hours, 0).toFixed(1));
-		}
-
-		// ---- Per-task completion detail ----
-		const taskBreakdown = tasks.map(t => ({
-			id: t._id,
-			title: t.title,
-			status: t.status,
-			priority: t.priority || "Medium",
-			estimatedHours: t.estimatedHours || 0,
-			assignees: (t.assignees || []).map(a => typeof a === "string" ? a : a.name).filter(Boolean),
-			hasGithubIssue: !!t.githubIssueNumber,
-			githubIssueNumber: t.githubIssueNumber || null,
-		}));
-
-		// ---- Velocity / burn rate ----
-		const estimatedTotalHours = tasks.reduce((s, t) => s + (t.estimatedHours || 0), 0);
-		const completedEstHours = tasks.filter(t => t.status === "done").reduce((s, t) => s + (t.estimatedHours || 0), 0);
+		const estimatedTotalHours = taskBreakdown.reduce(
+			(sum, taskEntry) => sum + (Number(taskEntry.estimatedHours) || 0),
+			0,
+		);
+		const completedEstimatedHours = taskBreakdown
+			.filter((taskEntry) => taskEntry.status === "done")
+			.reduce((sum, taskEntry) => sum + (Number(taskEntry.estimatedHours) || 0), 0);
+		const remainingHours = Math.max(0, estimatedTotalHours - completedEstimatedHours);
 		const hoursPerDay = daysElapsed > 0 ? parseFloat((totalCodingHours / Math.min(daysElapsed, 7)).toFixed(1)) : 0;
-		const remainingHours = Math.max(0, estimatedTotalHours - completedEstHours);
 		const estimatedDaysLeft = hoursPerDay > 0 ? Math.ceil(remainingHours / hoursPerDay) : null;
 
 		return res.status(200).json({
@@ -931,18 +1209,20 @@ const getProjectCompletionStats = async (req, res) => {
 					daysElapsed,
 					daysRemaining,
 					timelinePercent,
-					deadlineDate: deadlineDateIso,
+					deadlineDate: projectDeadline ? projectDeadline.toISOString().slice(0, 10) : null,
 					createdAt: createdAt.toISOString().slice(0, 10),
 				},
+				deadlines: deadlineSummary,
 				github: githubStats,
 				coding: {
 					totalHours7d: totalCodingHours,
 					byDay: codingByDay,
-					avgPerDay: parseFloat((totalCodingHours / 7).toFixed(1)),
+					avgPerDay: avgCodingPerDay,
+					members: memberStats,
 				},
 				velocity: {
 					estimatedTotalHours,
-					completedEstHours,
+					completedEstHours: completedEstimatedHours,
 					remainingHours,
 					hoursPerDay,
 					estimatedDaysLeft,
