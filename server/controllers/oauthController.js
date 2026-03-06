@@ -388,10 +388,14 @@ async function HandleGithubOAuth(req, res) {
     const roleFromCookie = cookies[ROLE_COOKIE];
     const lookupEmail = manualEmail || manualEmailFromCookie || email;
 
+    const githubExpiresAt = tokenData.expires_in
+      ? new Date(Date.now() + Number(tokenData.expires_in) * 1000)
+      : null;
+
     const freshGithubTokens = {
       accessToken: tokenData.access_token || null,
       refreshToken: tokenData.refresh_token || null,
-      expiresAt: null,
+      expiresAt: githubExpiresAt,
       scope: tokenData.scope || null,
     };
     console.log("Fresh tokens: ", freshGithubTokens);

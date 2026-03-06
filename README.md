@@ -89,6 +89,8 @@ WAKATIME_SCOPES=read_summaries read_stats
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 GITHUB_SCOPES=repo read:user user:email
+# Optional only if you intentionally create org-owned repos (leave unset for personal-account repos):
+# GITHUB_APP_ORG=your_org_login
 
 # Optional explicit redirect URIs
 # WAKATIME_REDIRECT_URI=http://localhost:3000/api/oauth/wakatime-redirect

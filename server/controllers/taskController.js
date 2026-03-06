@@ -2,7 +2,7 @@ const Task = require("../models/Task");
 const Project = require("../models/Project");
 const User = require("../models/UserSchema");
 const { createIssue, checkCollaborator, addCollaborator, assignIssue, getPullRequestsForIssue, getIssueDetails, getPRReviews, getPRReviewComments, postPRReview, getPRDiff, getBranchActivity } = require("../services/githubService");
-const { getWakaTimeStats } = require("../services/wakatime-stats");
+const { fetchTimeStats } = require("../services/wakatime-stats");
 
 const parseCookies = (req) => {
   const raw = req.headers.cookie;
@@ -291,12 +291,12 @@ const getTaskDetails = async (req, res) => {
     };
 
     // Fetch GitHub stats if available
-    const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
+    const token = sessionUser.githubTokens?.accessToken;
     if (!token) {
       console.log(`[Task Details] No GitHub token available`);
       return res.status(400).json({ 
         error: "github_not_connected",
-        message: "GitHub token not available. Please connect GitHub or configure GITHUB_TOKEN environment variable."
+        message: "GitHub token not available. Please connect GitHub."
       });
     }
 
@@ -558,13 +558,13 @@ Return ONLY a JSON object:
           const start = new Date();
           start.setDate(end.getDate() - 7);
           
-          const stats = await getWakaTimeStats(
+          const stats = await fetchTimeStats(
             assigneeUser.wakatimeTokens.accessToken,
             start.toISOString().split('T')[0],
             end.toISOString().split('T')[0]
           );
 
-          const totalSeconds = stats?.data?.data?.reduce((sum, day) => sum + (day.grand_total?.total_seconds || 0), 0) || 0;
+          const totalSeconds = stats?.data?.reduce((sum, day) => sum + (day.grand_total?.total_seconds || 0), 0) || 0;
           const totalHours = (totalSeconds / 3600).toFixed(1);
 
           return {
@@ -572,7 +572,7 @@ Return ONLY a JSON object:
             connected: true,
             totalHours: parseFloat(totalHours),
             dailyAverage: parseFloat((totalHours / 7).toFixed(1)),
-            lastSevenDays: stats?.data?.data?.map(day => ({
+            lastSevenDays: stats?.data?.map(day => ({
               date: day.range?.date,
               hours: ((day.grand_total?.total_seconds || 0) / 3600).toFixed(1),
             })) || [],

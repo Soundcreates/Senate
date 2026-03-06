@@ -1,8 +1,111 @@
+const {
+  resolveGithubAccessToken,
+  refreshGithubAccessTokenByCurrentToken,
+} = require("./oauthTokenService");
+
 const buildTodayRange = () => {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59));
   return { start, end };
+};
+
+const withGithubHeaders = (headers = {}, accessToken) => ({
+  ...headers,
+  Authorization: `Bearer ${accessToken}`,
+  "User-Agent": headers["User-Agent"] || "Datathon-2026",
+  "X-GitHub-Api-Version": headers["X-GitHub-Api-Version"] || "2022-11-28",
+});
+
+const githubFetchWithAutoRefresh = async (url, options = {}, token) => {
+  const execute = async (accessToken) =>
+    fetch(url, {
+      ...options,
+      headers: withGithubHeaders(options.headers, accessToken),
+    });
+
+  let activeToken = resolveGithubAccessToken(token);
+  let response = await execute(activeToken);
+
+  if (response.status !== 401) {
+    return response;
+  }
+
+  try {
+    const refreshedToken = await refreshGithubAccessTokenByCurrentToken(activeToken);
+    if (!refreshedToken) {
+      return response;
+    }
+    activeToken = refreshedToken;
+    response = await execute(activeToken);
+  } catch (refreshError) {
+    console.warn("[GitHub] Access token refresh failed:", refreshError.message);
+  }
+
+  return response;
+};
+
+const githubRequestHeaders = {
+  Accept: "application/vnd.github+json",
+  "Content-Type": "application/json",
+  "User-Agent": "Datathon-2026",
+  "X-GitHub-Api-Version": "2022-11-28",
+};
+
+const parseJsonSafe = async (response) => {
+  try {
+    return await response.json();
+  } catch (_err) {
+    return {};
+  }
+};
+
+const getConfiguredOrgOwner = () => {
+  const configured =
+    process.env.GITHUB_APP_ORG ||
+    process.env.GITHUB_ORG ||
+    process.env.GITHUB_REPO_OWNER ||
+    null;
+
+  return configured ? configured.trim() : null;
+};
+
+const inferIntegrationOwner = async () => {
+  const configuredOrg = getConfiguredOrgOwner();
+  if (configuredOrg) {
+    return { login: configuredOrg, type: "Organization", source: "env" };
+  }
+
+  return null;
+};
+
+const buildRepoPayload = (name, description) => ({
+  name,
+  description,
+  private: true,
+  auto_init: true,
+});
+
+const createRepoInOrg = async (orgLogin, payload, token) => {
+  const orgCreateResponse = await githubFetchWithAutoRefresh(
+    `https://api.github.com/orgs/${encodeURIComponent(orgLogin)}/repos`,
+    {
+      method: "POST",
+      headers: githubRequestHeaders,
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+
+  const orgData = await parseJsonSafe(orgCreateResponse);
+  if (!orgCreateResponse.ok) {
+    const error = new Error("github_repo_create_failed");
+    error.status = orgCreateResponse.status;
+    error.details = orgData;
+    throw error;
+  }
+
+  return orgData;
 };
 
 const mapCommit = (commit, repoFullName, fallbackUsername) => ({
@@ -15,7 +118,7 @@ const mapCommit = (commit, repoFullName, fallbackUsername) => ({
 });
 
 const fetchGitHubJson = async (url, token) => {
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -23,7 +126,7 @@ const fetchGitHubJson = async (url, token) => {
       "User-Agent": "Datathon-2026",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -48,14 +151,14 @@ const getTodayCommits = async (project, username, token) => {
   }
 
   const url = `https://api.github.com/repos/${project.owner}/${project.repo}/commits?${params.toString()}`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "User-Agent": "Datathon-2026",
     },
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -92,7 +195,7 @@ const getRecentCommits = async (token, { limit = 5 } = {}) => {
       )}/commits?author=${encodeURIComponent(login)}&per_page=5&since=${encodeURIComponent(since)}`;
 
       try {
-        const response = await fetch(commitsUrl, {
+        const response = await githubFetchWithAutoRefresh(commitsUrl, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -100,7 +203,7 @@ const getRecentCommits = async (token, { limit = 5 } = {}) => {
             "User-Agent": "Datathon-2026",
             "X-GitHub-Api-Version": "2022-11-28",
           },
-        });
+        }, token);
 
         if (response.status === 409) {
           return [];
@@ -141,7 +244,7 @@ const getGitHubUser = async (token) => {
  */
 const createIssue = async (owner, repo, title, body, token, labels = []) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -151,7 +254,7 @@ const createIssue = async (owner, repo, title, body, token, labels = []) => {
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({ title, body: body || "", labels }),
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -169,7 +272,7 @@ const createIssue = async (owner, repo, title, body, token, labels = []) => {
  */
 const checkCollaborator = async (owner, repo, username, token) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators/${encodeURIComponent(username)}`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -177,7 +280,7 @@ const checkCollaborator = async (owner, repo, username, token) => {
       "User-Agent": "Datathon-2026",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-  });
+  }, token);
   return response.status === 204;
 };
 
@@ -188,7 +291,7 @@ const checkCollaborator = async (owner, repo, username, token) => {
  */
 const addCollaborator = async (owner, repo, username, token) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/collaborators/${encodeURIComponent(username)}`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -197,7 +300,7 @@ const addCollaborator = async (owner, repo, username, token) => {
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({ permission: "push" }),
-  });
+  }, token);
 
   if (response.status === 201 || response.status === 204) {
     return { ok: true, status: response.status === 201 ? "invited" : "already_collaborator" };
@@ -216,7 +319,7 @@ const addCollaborator = async (owner, repo, username, token) => {
  */
 const assignIssue = async (owner, repo, issueNumber, assignees, token) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -226,7 +329,7 @@ const assignIssue = async (owner, repo, issueNumber, assignees, token) => {
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({ assignees }),
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -262,30 +365,48 @@ const createRepo = async (name, description, token) => {
       .substring(0, 350); // GitHub's max length
   }
 
-  const response = await fetch("https://api.github.com/user/repos", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      "User-Agent": "Datathon-2026",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    body: JSON.stringify({
-      name: sanitizedName,
-      description: sanitizedDesc,
-      private: true,
-      auto_init: true,
-    }),
-  });
+  const repoPayload = buildRepoPayload(sanitizedName, sanitizedDesc);
 
-  const data = await response.json();
+  const response = await githubFetchWithAutoRefresh("https://api.github.com/user/repos", {
+    method: "POST",
+    headers: githubRequestHeaders,
+    body: JSON.stringify(repoPayload),
+  }, token);
+
+  const data = await parseJsonSafe(response);
+  if (response.ok) {
+    return data;
+  }
+
+  const isIntegrationScopeError =
+    response.status === 403 &&
+    String(data?.message || "").toLowerCase().includes("resource not accessible by integration");
+
+  if (isIntegrationScopeError) {
+    const integrationOwner = await inferIntegrationOwner();
+
+    if (integrationOwner?.login && integrationOwner.type === "Organization") {
+      return createRepoInOrg(integrationOwner.login, repoPayload, token);
+    }
+
+    const error = new Error("github_repo_create_failed");
+    error.status = response.status;
+    error.details = {
+      ...data,
+      hint:
+        "Personal-account repo creation is enforced. /user/repos is blocked for this token. Reconnect GitHub so the user token can create personal repositories (repository administration write), or set GITHUB_APP_ORG only if you intentionally want org-owned repositories.",
+      inferredOwner: integrationOwner,
+    };
+    throw error;
+  }
+
   if (!response.ok) {
     const error = new Error("github_repo_create_failed");
     error.status = response.status;
     error.details = data;
     throw error;
   }
+
   return data;
 };
 
@@ -295,7 +416,7 @@ const createRepo = async (name, description, token) => {
  */
 const createLabel = async (owner, repo, name, color, token) => {
   const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/labels`;
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -305,7 +426,7 @@ const createLabel = async (owner, repo, name, color, token) => {
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({ name, color: color || "ededed" }),
-  });
+  }, token);
 
   // 422 means label already exists — that's fine
   if (response.status === 422) return { name, already_exists: true };
@@ -329,7 +450,7 @@ const createFile = async (owner, repo, path, content, message, token) => {
   // GitHub API requires base64 encoding
   const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
   
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -342,7 +463,7 @@ const createFile = async (owner, repo, path, content, message, token) => {
       message,
       content: contentBase64,
     }),
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -363,14 +484,14 @@ const createOrUpdateFile = async (owner, repo, path, content, message, token) =>
   // Try to get existing file to get its SHA
   let sha = null;
   try {
-    const getResponse = await fetch(url, {
+    const getResponse = await githubFetchWithAutoRefresh(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
     
     if (getResponse.ok) {
       const existingFile = await getResponse.json();
@@ -394,7 +515,7 @@ const createOrUpdateFile = async (owner, repo, path, content, message, token) =>
     body.sha = sha;
   }
   
-  const response = await fetch(url, {
+  const response = await githubFetchWithAutoRefresh(url, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -404,7 +525,7 @@ const createOrUpdateFile = async (owner, repo, path, content, message, token) =>
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify(body),
-  });
+  }, token);
 
   const data = await response.json();
   if (!response.ok) {
@@ -423,14 +544,14 @@ const getPullRequestsForIssue = async (owner, repo, issueNumber, token) => {
   try {
     // First get all PRs that reference this issue
     const timelineUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}/timeline`;
-    const timelineResponse = await fetch(timelineUrl, {
+    const timelineResponse = await githubFetchWithAutoRefresh(timelineUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!timelineResponse.ok) {
       return { prs: [], error: `Failed to fetch timeline: ${timelineResponse.status}` };
@@ -445,14 +566,14 @@ const getPullRequestsForIssue = async (owner, repo, issueNumber, token) => {
     const prStats = [];
     for (const prNumber of prNumbers) {
       const prUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}`;
-      const prResponse = await fetch(prUrl, {
+      const prResponse = await githubFetchWithAutoRefresh(prUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github+json",
           "User-Agent": "Datathon-2026",
           "X-GitHub-Api-Version": "2022-11-28",
         },
-      });
+      }, token);
 
       if (prResponse.ok) {
         const pr = await prResponse.json();
@@ -486,27 +607,27 @@ const getPRReviewComments = async (owner, repo, prNumber, token) => {
   try {
     // Get inline review comments (posted on specific lines)
     const reviewCommentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/comments`;
-    const reviewCommentsRes = await fetch(reviewCommentsUrl, {
+    const reviewCommentsRes = await githubFetchWithAutoRefresh(reviewCommentsUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
     
     const reviewComments = reviewCommentsRes.ok ? await reviewCommentsRes.json() : [];
     
     // Get issue-level comments on the PR (general comments, bot comments)
     const issueCommentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${prNumber}/comments`;
-    const issueCommentsRes = await fetch(issueCommentsUrl, {
+    const issueCommentsRes = await githubFetchWithAutoRefresh(issueCommentsUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
     
     const issueComments = issueCommentsRes.ok ? await issueCommentsRes.json() : [];
     
@@ -559,7 +680,7 @@ const getPRReviewComments = async (owner, repo, prNumber, token) => {
 const postPRReview = async (owner, repo, prNumber, reviewBody, token) => {
   try {
     const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/reviews`;
-    const response = await fetch(url, {
+    const response = await githubFetchWithAutoRefresh(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -572,7 +693,7 @@ const postPRReview = async (owner, repo, prNumber, reviewBody, token) => {
         event: 'COMMENT',
         body: reviewBody,
       }),
-    });
+    }, token);
     
     if (!response.ok) {
       const data = await response.json();
@@ -593,14 +714,14 @@ const postPRReview = async (owner, repo, prNumber, reviewBody, token) => {
 const getPRDiff = async (owner, repo, prNumber, token) => {
   try {
     const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/files`;
-    const response = await fetch(url, {
+    const response = await githubFetchWithAutoRefresh(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
     
     if (!response.ok) return { files: [], error: `Failed: ${response.status}` };
     
@@ -626,14 +747,14 @@ const getPRDiff = async (owner, repo, prNumber, token) => {
 const getPRReviews = async (owner, repo, prNumber, token) => {
   try {
     const reviewsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${prNumber}/reviews`;
-    const response = await fetch(reviewsUrl, {
+    const response = await githubFetchWithAutoRefresh(reviewsUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!response.ok) {
       return { reviews: [], score: 0, error: `Failed to fetch reviews: ${response.status}` };
@@ -695,14 +816,14 @@ const createBranch = async (owner, repo, branchName, token) => {
   try {
     // Get the default branch's latest commit SHA
     const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-    const repoResponse = await fetch(repoUrl, {
+    const repoResponse = await githubFetchWithAutoRefresh(repoUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!repoResponse.ok) {
       return { success: false, error: `Failed to fetch repo: ${repoResponse.status}` };
@@ -713,14 +834,14 @@ const createBranch = async (owner, repo, branchName, token) => {
 
     // Get the SHA of the default branch
     const branchUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/ref/heads/${defaultBranch}`;
-    const branchResponse = await fetch(branchUrl, {
+    const branchResponse = await githubFetchWithAutoRefresh(branchUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!branchResponse.ok) {
       return { success: false, error: `Failed to fetch branch: ${branchResponse.status}` };
@@ -731,7 +852,7 @@ const createBranch = async (owner, repo, branchName, token) => {
 
     // Create the new branch
     const createBranchUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/refs`;
-    const createResponse = await fetch(createBranchUrl, {
+    const createResponse = await githubFetchWithAutoRefresh(createBranchUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -744,7 +865,7 @@ const createBranch = async (owner, repo, branchName, token) => {
         ref: `refs/heads/${branchName}`,
         sha,
       }),
-    });
+    }, token);
 
     const createData = await createResponse.json();
     if (!createResponse.ok) {
@@ -769,14 +890,14 @@ const getBranchActivity = async (owner, repo, branchName, token) => {
   try {
     // Get the default branch first
     const repoUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-    const repoResponse = await fetch(repoUrl, {
+    const repoResponse = await githubFetchWithAutoRefresh(repoUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!repoResponse.ok) {
       return { error: 'Failed to fetch repository info', commits: [], comparison: null };
@@ -787,14 +908,14 @@ const getBranchActivity = async (owner, repo, branchName, token) => {
 
     // Fetch commits on this branch
     const commitsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branchName)}&per_page=20`;
-    const commitsResponse = await fetch(commitsUrl, {
+    const commitsResponse = await githubFetchWithAutoRefresh(commitsUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     let commits = [];
     if (commitsResponse.ok) {
@@ -803,14 +924,14 @@ const getBranchActivity = async (owner, repo, branchName, token) => {
 
     // Compare branch with default branch
     const compareUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(defaultBranch)}...${encodeURIComponent(branchName)}`;
-    const compareResponse = await fetch(compareUrl, {
+    const compareResponse = await githubFetchWithAutoRefresh(compareUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     let comparison = null;
     if (compareResponse.ok) {
@@ -849,14 +970,14 @@ const getBranchActivity = async (owner, repo, branchName, token) => {
 const getIssueDetails = async (owner, repo, issueNumber, token) => {
   try {
     const issueUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}`;
-    const response = await fetch(issueUrl, {
+    const response = await githubFetchWithAutoRefresh(issueUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     if (!response.ok) {
       return { issue: null, error: `Failed to fetch issue: ${response.status}`, status: response.status };
@@ -866,14 +987,14 @@ const getIssueDetails = async (owner, repo, issueNumber, token) => {
     
     // Get comments
     const commentsUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}/comments`;
-    const commentsResponse = await fetch(commentsUrl, {
+    const commentsResponse = await githubFetchWithAutoRefresh(commentsUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "Datathon-2026",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
+    }, token);
 
     const comments = commentsResponse.ok ? await commentsResponse.json() : [];
 

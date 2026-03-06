@@ -34,13 +34,9 @@ const createProject = async (req, res) => {
 			return res.status(401).json({ error: "no_session" });
 		}
 
-		// Use user's token or fallback to env token for testing
-		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
+		const token = sessionUser.githubTokens?.accessToken;
 		if (!token) {
 			return res.status(400).json({ error: "github_not_connected" });
-		}
-		if (!sessionUser.githubTokens?.accessToken) {
-			console.log(`[GitHub] Using environment token (GITHUB_TOKEN) for user ${sessionUser.name || sessionUser.email}`);
 		}
 
 		const projectName = (req.body?.name || "").trim();
@@ -229,12 +225,8 @@ const createFullProject = async (req, res) => {
 		);
 
 		// --- GitHub integration: create repo, issues, invitations, assignments — all in parallel ---
-		// Use user's token or fallback to env token for testing
-		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
+		const token = sessionUser.githubTokens?.accessToken;
 		if (token) {
-			if (!sessionUser.githubTokens?.accessToken) {
-				console.log(`[GitHub] Using environment token (GITHUB_TOKEN) for user ${sessionUser.name || sessionUser.email}`);
-			}
 			console.log(`\n[GitHub Integration] Starting for project "${name}"...`);
 			try {
 				// Step 1: Create the GitHub repo
@@ -735,16 +727,20 @@ const getProjectCompletionStats = async (req, res) => {
 		const taskPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
 		// ---- Timeline / Deadline progress ----
-		const createdAt = project.createdAt ? new Date(project.createdAt) : new Date();
+		const createdAtCandidate = project.createdAt ? new Date(project.createdAt) : new Date();
+		const createdAt = Number.isNaN(createdAtCandidate.getTime()) ? new Date() : createdAtCandidate;
 		const now = new Date();
 		let deadlineDate = null;
 		let daysRemaining = null;
 		let daysElapsed = Math.max(1, Math.round((now - createdAt) / (1000 * 60 * 60 * 24)));
 		let timelinePercent = null;
+		let deadlineDateIso = null;
 
 		if (project.deadline) {
-			deadlineDate = new Date(project.deadline);
-			if (!isNaN(deadlineDate.getTime())) {
+			const parsedDeadline = new Date(project.deadline);
+			if (!isNaN(parsedDeadline.getTime())) {
+				deadlineDate = parsedDeadline;
+				deadlineDateIso = parsedDeadline.toISOString().slice(0, 10);
 				const totalDuration = deadlineDate - createdAt;
 				const elapsed = now - createdAt;
 				daysRemaining = Math.max(0, Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24)));
@@ -754,7 +750,7 @@ const getProjectCompletionStats = async (req, res) => {
 
 		// ---- GitHub stats (real data) ----
 		let githubStats = null;
-		const token = sessionUser.githubTokens?.accessToken || process.env.GITHUB_TOKEN;
+		const token = sessionUser.githubTokens?.accessToken;
 		const owner = project.owner;
 		const repo = project.repo;
 
@@ -935,7 +931,7 @@ const getProjectCompletionStats = async (req, res) => {
 					daysElapsed,
 					daysRemaining,
 					timelinePercent,
-					deadlineDate: deadlineDate ? deadlineDate.toISOString().slice(0, 10) : null,
+					deadlineDate: deadlineDateIso,
 					createdAt: createdAt.toISOString().slice(0, 10),
 				},
 				github: githubStats,
