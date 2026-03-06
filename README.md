@@ -74,7 +74,7 @@ MONGO_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 
 CLIENT_URL=http://localhost:5173
-PYTHON_URL=https://senate-rag.onrender.com
+PYTHON_URL= PORT 8000 (uvicorn)
 
 # Cloudinary
 CLOUDINARY_URL=your_cloudinary_url
@@ -93,8 +93,8 @@ GITHUB_SCOPES=repo read:user user:email
 # GITHUB_APP_ORG=your_org_login
 
 # Optional explicit redirect URIs
-# WAKATIME_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/wakatime-redirect
-# GITHUB_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/github-redirect
+# WAKATIME_REDIRECT_URI=http://localhost:3000/api/oauth/wakatime-redirect
+# GITHUB_REDIRECT_URI=http://localhost:3000/api/oauth/github-redirect
 ```
 
 ### 2) Resume service env (`resumeRag/.env`)
@@ -111,10 +111,20 @@ CHROMA_HOST=api.trychroma.com
 ### 3) Frontend env (`client/.env`)
 
 ```dotenv
-VITE_BACKEND_URL=https://senate-qiog.onrender.com
+VITE_BACKEND_URL=http://localhost:3000
 ```
 
 > Never commit real secrets. Use placeholder values for shared examples.
+
+### GitHub App Installation (Admins)
+
+Admins who create projects/repos must install the Senate GitHub App on their GitHub account before using project creation flows.
+
+- Install the app on your personal account (or on your org if you intentionally create org-owned repos).
+- Grant the required repository permissions during installation.
+- Then connect GitHub in the app (OAuth) using the same GitHub account.
+
+Without app installation, repository creation and task automation (issues, collaborators, branches) will fail.
 
 ## Local Development Setup
 
@@ -158,8 +168,8 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 ## Service URLs
 
 - Frontend: `http://localhost:5173`
-- Backend (Express): `https://senate-qiog.onrender.com`
-- Resume service (FastAPI): `https://senate-rag.onrender.com`
+- Backend (Express): `http://localhost:3000`
+- Resume service (FastAPI): `PORT 8000`
 
 ## API Overview
 
