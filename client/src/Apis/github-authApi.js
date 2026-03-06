@@ -11,7 +11,7 @@ export const startGithubLogin = (manualEmail, redirectTo, role) => {
   if (redirectTo) {
     url.searchParams.set("redirectTo", redirectTo);
   }
-  if (role) {
+  if (role === "admin" || role === "developer") {
     url.searchParams.set("role", role);
   }
   window.location.assign(url.toString());

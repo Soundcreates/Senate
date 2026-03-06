@@ -431,19 +431,26 @@ async function HandleGithubOAuth(req, res) {
         console.log(
           "GitHub id in db with diff email, but target email already exists — linking GitHub to it",
         );
+        console.log("User applying for role: ", roleFromCookie);
+        console.log("User actually applying for: ", role);
+ 
         user = existingByEmail;
-      } else {
+        user.role = role;
+        await user.save();
+     } else {
         console.log(
           "GitHub id in db but diff email, creating new user for alternate role",
         );
+        console.log("User applying for role: ", roleFromCookie);
+        console.log("User actually applying for: ", role);
         user = await createUser({
           name: userData.name || userData.login,
-          email: lookupEmail,
+          email: lookupEmail,          
           avatarUrl: userData.avatar_url || null,
           githubId,
           githubUsername: userData.login || null,
           githubUrls,
-          role: roleFromCookie || "developer",
+          role: role,
           githubTokens: freshGithubTokens,
         });
       }

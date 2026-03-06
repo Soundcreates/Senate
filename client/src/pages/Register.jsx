@@ -22,7 +22,6 @@ const Register = () => {
     const [developerPasswordConfirm, setDeveloperPasswordConfirm] = useState('');
     const [developerError, setDeveloperError] = useState('');
     const [isSubmittingDeveloper, setIsSubmittingDeveloper] = useState(false);
-    const [role, setRole] = useState('developer');
     const [adminEmail, setAdminEmail] = useState('');
     const [adminPassword, setAdminPassword] = useState('');
     const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
@@ -94,17 +93,9 @@ const Register = () => {
     };
 
     const handleGithubConnect = () => {
-        const email = role === 'admin' ? adminEmail.trim() : manualEmail.trim();
-        startGithubLogin(email, "register", role);
-    };
-
-    const handleRoleContinue = () => {
-        if (roleChoice === 'admin') {
-            setRole('admin');
-            return;
-        }
-        setRole('developer');
-        setStep(1);
+        const selectedRole = roleChoice === 'admin' ? 'admin' : 'developer';
+        const email = selectedRole === 'admin' ? adminEmail.trim() : manualEmail.trim();
+        startGithubLogin(email, "register", selectedRole);
     };
 
     const handleAdminRegister = async () => {
@@ -238,7 +229,6 @@ const Register = () => {
             if (result.ok && result.user) {
                 setUser(result.user);
                 setRoleChoice('developer');
-                setRole('developer');
                 try {
                     const storedEmail = localStorage.getItem('register.email');
                     if (storedEmail) {
