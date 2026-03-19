@@ -29,6 +29,11 @@ app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 app.use("/api", require("./routes"));
+
+app.get("/api/health", (req,res) => {
+  return {"message": "Hello world"};
+})
+
 app.use((req, res) => {
   res.status(404).json({ error: "Not Found", path: req.originalUrl });
 });
