@@ -73,7 +73,7 @@ PORT=3000
 MONGO_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 
-CLIENT_URL=http://localhost:5173
+CLIENT_URL=https://senate-ojiz.vercel.app
 PYTHON_URL= PORT 8000 (uvicorn)
 
 # Cloudinary
@@ -93,8 +93,8 @@ GITHUB_SCOPES=repo read:user user:email
 # GITHUB_APP_ORG=your_org_login
 
 # Optional explicit redirect URIs
-# WAKATIME_REDIRECT_URI=http://localhost:3000/api/oauth/wakatime-redirect
-# GITHUB_REDIRECT_URI=http://localhost:3000/api/oauth/github-redirect
+# WAKATIME_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/wakatime-redirect
+# GITHUB_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/github-redirect
 ```
 
 ### 2) Resume service env (`resumeRag/.env`)
@@ -111,7 +111,7 @@ CHROMA_HOST=api.trychroma.com
 ### 3) Frontend env (`client/.env`)
 
 ```dotenv
-VITE_BACKEND_URL=http://localhost:3000
+VITE_BACKEND_URL=https://senate-qiog.onrender.com
 ```
 
 > Never commit real secrets. Use placeholder values for shared examples.
@@ -167,8 +167,8 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
 ## Service URLs
 
-- Frontend: `http://localhost:5173`
-- Backend (Express): `http://localhost:3000`
+- Frontend: `https://senate-ojiz.vercel.app`
+- Backend (Express): `https://senate-qiog.onrender.com`
 - Resume service (FastAPI): `PORT 8000`
 
 ## API Overview
@@ -226,7 +226,7 @@ Deployment scripts exist in `contracts/scripts/` and ignition modules in `contra
 - If calling through backend upload flow, ensure `server` is running and sending payload to FastAPI.
 
 ### 2) OAuth redirect lands on backend `/register` and returns 404
-- Set `CLIENT_URL=http://localhost:5173` in `server/.env`.
+- Set `CLIENT_URL=https://senate-ojiz.vercel.app` in `server/.env`.
 - Backend should redirect to frontend routes, not backend routes.
 
 ### 3) CORS errors from n8n webhook

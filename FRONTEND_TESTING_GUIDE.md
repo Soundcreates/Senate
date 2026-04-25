@@ -3,7 +3,7 @@
 ## 🚀 Quick Start
 
 **Backend**: https://senate-qiog.onrender.com ✅ (running)  
-**Frontend**: http://localhost:5174 ✅ (running)  
+**Frontend**: https://senate-ojiz.vercel.app ✅ (running)  
 **Oracle Address**: `0x4C3F5a84041E562928394d63b3E339bE70DBcC17` ✅ (whitelisted)
 
 ---
@@ -12,7 +12,7 @@
 
 ### Phase 1: Initial Setup (5 min)
 
-1. **Open the app**: http://localhost:5174
+1. **Open the app**: https://senate-ojiz.vercel.app
 2. **Login/Register** with your account
 3. **Connect MetaMask**:
    - Click wallet connect button (if in navbar) or go to Register page

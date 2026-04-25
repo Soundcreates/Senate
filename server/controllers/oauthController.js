@@ -12,13 +12,21 @@ const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
 const WAKATIME_REDIRECT_COOKIE = "wakatime_redirect";
 
 const PROD_SERVER_BASE_URL = "https://senate-qiog.onrender.com";
+const WAKATIME_CALLBACK_URL = new URL(
+  "/api/oauth/wakatime-redirect",
+  PROD_SERVER_BASE_URL,
+).toString();
+const GITHUB_CALLBACK_URL = new URL(
+  "/api/oauth/github-redirect",
+  PROD_SERVER_BASE_URL,
+).toString();
 
 const buildRedirectUri = () => {
   const configured = process.env.WAKATIME_REDIRECT_URI?.trim();
-  if (configured && configured.startsWith(PROD_SERVER_BASE_URL)) {
+  if (configured && configured === WAKATIME_CALLBACK_URL) {
     return configured;
   }
-  return new URL("/api/oauth/wakatime-redirect", PROD_SERVER_BASE_URL).toString();
+  return WAKATIME_CALLBACK_URL;
 };
 
 const buildClientRedirectUrl = (params = {}, path = "/login") => {
@@ -34,9 +42,13 @@ const buildClientRedirectUrl = (params = {}, path = "/login") => {
   return redirectUrl.toString();
 };
 
-const buildGithubRedirectUri = (req) =>
-  process.env.GITHUB_REDIRECT_URI ||
-  `${req.protocol}://${req.get("host")}/api/oauth/github-redirect`;
+const buildGithubRedirectUri = () => {
+  const configured = process.env.GITHUB_REDIRECT_URI?.trim();
+  if (configured && configured === GITHUB_CALLBACK_URL) {
+    return configured;
+  }
+  return GITHUB_CALLBACK_URL;
+};
 
 const parseCookies = (req) => {
   const raw = req.headers.cookie;
@@ -253,7 +265,7 @@ async function HandleGithubOAuth(req, res) {
     return res.status(400).json({ error, errorDescription });
   }
 
-  const redirectUri = buildGithubRedirectUri(req);
+  const redirectUri = buildGithubRedirectUri();
   const scope = process.env.GITHUB_SCOPES || "read:user user:email";
 
   if (!code) {
