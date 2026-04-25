@@ -11,9 +11,15 @@ const ROLE_COOKIE = "manual_role";
 const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
 const WAKATIME_REDIRECT_COOKIE = "wakatime_redirect";
 
-const buildRedirectUri = (req) =>
-  process.env.WAKATIME_REDIRECT_URI ||
-  `${req.protocol}://${req.get("host")}/api/oauth/wakatime-redirect`;
+const PROD_SERVER_BASE_URL = "https://senate-qiog.onrender.com";
+
+const buildRedirectUri = () => {
+  const configured = process.env.WAKATIME_REDIRECT_URI?.trim();
+  if (configured && configured.startsWith(PROD_SERVER_BASE_URL)) {
+    return configured;
+  }
+  return new URL("/api/oauth/wakatime-redirect", PROD_SERVER_BASE_URL).toString();
+};
 
 const buildClientRedirectUrl = (params = {}, path = "/login") => {
   const baseUrl = process.env.CLIENT_URL || "https://senate-qiog.onrender.com";
@@ -78,7 +84,7 @@ async function HandleWakaTimeOAuth(req, res) {
     return res.status(400).json({ error, errorDescription });
   }
 
-  const redirectUri = buildRedirectUri(req);
+  const redirectUri = buildRedirectUri();
   const scope = process.env.WAKATIME_SCOPES || "read_stats";
 
   if (!code) {
