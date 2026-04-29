@@ -4,14 +4,14 @@ const getOpenAIClient = async () => {
   if (!openaiClient) {
     const { default: OpenAI } = await import("openai");
     openaiClient = new OpenAI({
-      baseURL: process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1",
-      apiKey: process.env.FEATHERLESS_API_KEY,
+      baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+      apiKey: process.env.GROQ_API_KEY,
     });
   }
   return openaiClient;
 };
 
-const getFeatherlessModel = () => process.env.FEATHERLESS_MODEL || "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B";
+const getGroqModel = () => process.env.GROQ_MODEL || "llama-3.1-70b-versatile";
 
 const splitIntoTasks = async (req, res) => {
   try {
@@ -21,13 +21,13 @@ const splitIntoTasks = async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    if (!process.env.FEATHERLESS_API_KEY) {
-      console.error("FEATHERLESS_API_KEY is not set in environment variables");
+    if (!process.env.GROQ_API_KEY) {
+      console.error("GROQ_API_KEY is not set in environment variables");
       return res.status(500).json({ error: "API configuration error" });
     }
 
     const client = await getOpenAIClient();
-    const model = getFeatherlessModel();
+    const model = getGroqModel();
     const systemPrompt = "You are a project management assistant.";
     const userPrompt = `Break down the following project request into a clear, actionable list of tasks. Return ONLY a JSON array of task objects with this exact format:
 [
@@ -83,13 +83,13 @@ const generateTitle = async (req, res) => {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
-    if (!process.env.FEATHERLESS_API_KEY) {
-      console.error("FEATHERLESS_API_KEY is not set in environment variables");
+    if (!process.env.GROQ_API_KEY) {
+      console.error("GROQ_API_KEY is not set in environment variables");
       return res.status(500).json({ error: "API configuration error" });
     }
 
     const client = await getOpenAIClient();
-    const model = getFeatherlessModel();
+    const model = getGroqModel();
     const completion = await client.chat.completions.create({
       model,
       max_tokens: 120,

@@ -3,6 +3,7 @@ venv/
 **/venv/
 **/.venv/
 .env
-
+compatible-venv/
+compatible-venv
 __pycache__/
 server/__pycache__/

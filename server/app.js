@@ -11,10 +11,11 @@ dns.setDefaultResultOrder("ipv4first");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
-const allowedOrigins = [
-  "https://senate-qiog.onrender.com",
-  "https://senate-ojiz.vercel.app",
-];
+const allowedOrigins = [];
+if (process.env.CLIENT_URL) allowedOrigins.push(process.env.CLIENT_URL);
+if (process.env.CLIENT_URL && process.env.CLIENT_URL.endsWith("/")) {
+  allowedOrigins.push(process.env.CLIENT_URL.replace(/\/+$/, ""));
+}
 app.use(
   cors({
     origin: allowedOrigins,

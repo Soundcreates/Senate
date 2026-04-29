@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, User, GitBranch, GitPullRequest, CheckCircle2, Clock, ExternalLink, Github, AlertCircle, MessageSquare, Award, TrendingUp, Zap, Activity, GitCommit, ArrowUp, ArrowDown, Calendar, Timer, Shield, Code2, FileCode, ChevronDown, ChevronUp, Target, DollarSign, Wallet } from 'lucide-react';
 import { getTaskPayments } from '../Apis/paymentApi';
+import { API_BASE_URL } from '@/config/apiBase';
+const BASE_API = API_BASE_URL;
 
 /* ─── Theme Tokens ─── */
 const C = {
@@ -88,7 +90,7 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
     const fetchTaskDetails = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`https://senate-qiog.onrender.com/api/projects/${projectId}/tasks/${task._id}/details`, { credentials: 'include' });
+        const res = await fetch(`${BASE_API}/api/projects/${projectId}/tasks/${task._id}/details`, { credentials: 'include' });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || 'Failed to fetch'); }
         setTaskDetails((await res.json()).task);
       } catch (err) { setError(err.message);
@@ -661,4 +663,3 @@ const TaskDetailModal = ({ task, projectId, onClose }) => {
 };
 
 export default TaskDetailModal;
-

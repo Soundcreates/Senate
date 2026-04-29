@@ -73,7 +73,7 @@ PORT=3000
 MONGO_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 
-CLIENT_URL=https://senate-ojiz.vercel.app
+CLIENT_URL=https://senate-ojiz.vercel.app/
 PYTHON_URL= PORT 8000 (uvicorn)
 
 # Cloudinary
@@ -95,6 +95,13 @@ GITHUB_SCOPES=repo read:user user:email
 # Optional explicit redirect URIs
 # WAKATIME_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/wakatime-redirect
 # GITHUB_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/github-redirect
+
+# Groq (used for task splitting + AI code review)
+GROQ_API_KEY=your_groq_api_key
+# Optional:
+# GROQ_BASE_URL=https://api.groq.com/openai/v1
+# GROQ_MODEL=llama-3.1-70b-versatile
+# GROQ_REVIEW_MODEL=llama-3.1-70b-versatile
 ```
 
 ### 2) Resume service env (`resumeRag/.env`)
@@ -167,9 +174,9 @@ uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
 ## Service URLs
 
-- Frontend: `https://senate-ojiz.vercel.app`
+- Frontend: `https://senate-ojiz.vercel.app/`
 - Backend (Express): `https://senate-qiog.onrender.com`
-- Resume service (FastAPI): `PORT 8000`
+- Resume service (FastAPI): `https://senate-rag.onrender.com`
 
 ## API Overview
 
@@ -226,7 +233,7 @@ Deployment scripts exist in `contracts/scripts/` and ignition modules in `contra
 - If calling through backend upload flow, ensure `server` is running and sending payload to FastAPI.
 
 ### 2) OAuth redirect lands on backend `/register` and returns 404
-- Set `CLIENT_URL=https://senate-ojiz.vercel.app` in `server/.env`.
+- Set `CLIENT_URL=https://senate-ojiz.vercel.app/` in `server/.env`.
 - Backend should redirect to frontend routes, not backend routes.
 
 ### 3) CORS errors from n8n webhook

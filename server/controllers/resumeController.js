@@ -1,7 +1,7 @@
 const cloudinary = require("../services/cloudinary");
 const User = require("../models/UserSchema");
 
-const PYTHON_URL = process.env.PYTHON_URL || "https://senate-rag.onrender.com";
+const getPythonUrl = () => process.env.PYTHON_URL;
 
 const parseCookies = (req) => {
   const raw = req.headers.cookie;
@@ -65,6 +65,10 @@ const uploadResume = async (req, res) => {
 
 const sendToVectorDB = async (resumeUrl, userId) => {
   console.log("Sending to vector db");
+  const PYTHON_URL = getPythonUrl();
+  if (!PYTHON_URL) {
+    throw new Error("PYTHON_URL is not set.");
+  }
   try{
     const response = await fetch(`${PYTHON_URL}/ingest-resume`, {
       method: "POST",

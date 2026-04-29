@@ -1,4 +1,5 @@
-const BASE_API = import.meta.env.VITE_BACKEND_URL || "https://senate-qiog.onrender.com"
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE_API = API_BASE_URL;
 
 export const splitTasks = async (payload) => {
   const response = await fetch(`${BASE_API}/api/gemini/split-tasks`, {

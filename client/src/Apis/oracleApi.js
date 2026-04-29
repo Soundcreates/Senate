@@ -1,4 +1,5 @@
-const BASE = "https://senate-qiog.onrender.com";
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE = API_BASE_URL;
 
 /**
  * Get oracle status / address

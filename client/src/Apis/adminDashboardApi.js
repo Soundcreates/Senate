@@ -1,4 +1,5 @@
-const BASE_API = "https://senate-qiog.onrender.com"
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE_API = API_BASE_URL;
 
 export const fetchAdminDashboard = async (token) => {
   const response = await fetch(`${BASE_API}/api/admin-dashboard/overview`, {

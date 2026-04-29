@@ -1,8 +1,14 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-const RAG_BASE_URL = (process.env.PYTHON_URL || "https://senate-rag.onrender.com").replace(/\/+$/, "");
-const RAG_ENDPOINT = `${RAG_BASE_URL}/get-recommendations`;
-const RAG_HEALTH_ENDPOINT = `${RAG_BASE_URL}/health`;
+const getRagEndpoints = () => {
+  const pythonUrl = process.env.PYTHON_URL;
+  if (!pythonUrl) throw new Error("PYTHON_URL is not set.");
+  const base = pythonUrl.replace(/\/+$/, "");
+  return {
+    ragEndpoint: `${base}/get-recommendations`,
+    ragHealthEndpoint: `${base}/health`,
+  };
+};
 
 /**
  * Get recommendations from the RAG endpoint
@@ -14,6 +20,8 @@ const RAG_HEALTH_ENDPOINT = `${RAG_BASE_URL}/health`;
  */
 async function getRecommendations(req, res) {
   try {
+    const { ragEndpoint: RAG_ENDPOINT, ragHealthEndpoint: RAG_HEALTH_ENDPOINT } =
+      getRagEndpoints();
     const { query, context, userId } = req.body;
 
     if (!query) {

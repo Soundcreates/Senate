@@ -413,11 +413,11 @@ const getTaskDetails = async (req, res) => {
               const latestPR = prWithReviews[prWithReviews.length - 1];
               const diffResult = await getPRDiff(project.owner, project.repo, latestPR.number, token);
               
-              if (diffResult.files.length > 0 && process.env.FEATHERLESS_API_KEY) {
+              if (diffResult.files.length > 0 && process.env.GROQ_API_KEY) {
                 const { default: OpenAI } = await import("openai");
                 const client = new OpenAI({
-                  baseURL: process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1",
-                  apiKey: process.env.FEATHERLESS_API_KEY,
+                  baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+                  apiKey: process.env.GROQ_API_KEY,
                 });
                 
                 // Build a concise diff summary (limit size)
@@ -444,7 +444,7 @@ Return ONLY a JSON object:
 }`;
 
                 const completion = await client.chat.completions.create({
-                  model: process.env.FEATHERLESS_MODEL || "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+                  model: process.env.GROQ_REVIEW_MODEL || "llama-3.1-70b-versatile",
                   max_tokens: 1000,
                   messages: [
                     { role: "system", content: "You are a code review expert. Return valid JSON only." },

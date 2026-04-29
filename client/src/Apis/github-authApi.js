@@ -1,5 +1,6 @@
 
-const BASE_API = "https://senate-qiog.onrender.com"
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE_API = API_BASE_URL;
 
 
 export const startGithubLogin = (manualEmail, redirectTo, role) => {

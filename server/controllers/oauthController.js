@@ -11,26 +11,32 @@ const ROLE_COOKIE = "manual_role";
 const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
 const WAKATIME_REDIRECT_COOKIE = "wakatime_redirect";
 
-const PROD_SERVER_BASE_URL = "https://senate-qiog.onrender.com";
+const getServerBaseUrl = () => process.env.SERVER_BASE_URL;
 const WAKATIME_CALLBACK_URL = new URL(
   "/api/oauth/wakatime-redirect",
-  PROD_SERVER_BASE_URL,
+  getServerBaseUrl() || "http://invalid.local",
 ).toString();
 const GITHUB_CALLBACK_URL = new URL(
   "/api/oauth/github-redirect",
-  PROD_SERVER_BASE_URL,
+  getServerBaseUrl() || "http://invalid.local",
 ).toString();
 
 const buildRedirectUri = () => {
+  if (!getServerBaseUrl()) {
+    throw new Error("SERVER_BASE_URL is not set.");
+  }
   const configured = process.env.WAKATIME_REDIRECT_URI?.trim();
-  if (configured && configured === WAKATIME_CALLBACK_URL) {
+  if (configured) {
     return configured;
   }
   return WAKATIME_CALLBACK_URL;
 };
 
 const buildClientRedirectUrl = (params = {}, path = "/login") => {
-  const baseUrl = process.env.CLIENT_URL || "https://senate-qiog.onrender.com";
+  const baseUrl = process.env.CLIENT_URL;
+  if (!baseUrl) {
+    throw new Error("CLIENT_URL is not set.");
+  }
   const redirectUrl = new URL(path, baseUrl);
 
   Object.entries(params).forEach(([key, value]) => {
@@ -43,8 +49,11 @@ const buildClientRedirectUrl = (params = {}, path = "/login") => {
 };
 
 const buildGithubRedirectUri = () => {
+  if (!getServerBaseUrl()) {
+    throw new Error("SERVER_BASE_URL is not set.");
+  }
   const configured = process.env.GITHUB_REDIRECT_URI?.trim();
-  if (configured && configured === GITHUB_CALLBACK_URL) {
+  if (configured) {
     return configured;
   }
   return GITHUB_CALLBACK_URL;

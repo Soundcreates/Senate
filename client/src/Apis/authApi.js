@@ -1,4 +1,5 @@
-const BASE_API="https://senate-qiog.onrender.com";
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE_API = API_BASE_URL;
 
 export const registerDeveloper = async ({ email, password, name }) => {
   const response = await fetch(`${BASE_API}/api/auth/developer/register`, {

@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || "https://senate-qiog.onrender.com";
+import { API_BASE_URL } from "@/config/apiBase";
+const API_URL = API_BASE_URL;
 
 
 // Configure axios to include credentials

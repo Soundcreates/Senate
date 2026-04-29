@@ -1,4 +1,5 @@
-const BASE_API = "https://senate-qiog.onrender.com"
+import { API_BASE_URL } from "@/config/apiBase";
+const BASE_API = API_BASE_URL;
 
 export const fetchRecentCommits = async (limit = 20) => {
   const url = new URL(`${BASE_API}/api/github/commits/recent`);

@@ -7,7 +7,9 @@ import { fetchWakatimeSession } from '@/Apis/wakatime-authApi';
 import { useAuth } from '../context/AuthContext';
 import { loginAdmin } from '@/Apis/admin-authApi';
 import { loginDeveloper } from '@/Apis/authApi';
+import { API_BASE_URL } from '@/config/apiBase';
 
+const BASE_API = API_BASE_URL;
 
 const Login = () => {
   const containerRef = useRef(null);
@@ -74,7 +76,15 @@ const Login = () => {
 
     setDeveloperError('');
     setIsSubmittingDeveloper(true);
-    const result = await loginDeveloper({ email: trimmedEmail, password: developerPassword });
+    let result;
+    try {
+      result = await loginDeveloper({ email: trimmedEmail, password: developerPassword });
+    } catch (error) {
+      console.error('Developer login request failed:', error);
+      setDeveloperError(`Cannot reach backend at ${BASE_API}. Is it running?`);
+      setIsSubmittingDeveloper(false);
+      return;
+    }
     if (!result.ok) {
       setDeveloperError('Invalid credentials.');
       setIsSubmittingDeveloper(false);
@@ -95,7 +105,15 @@ const Login = () => {
 
     setAdminError('');
     setIsSubmittingAdmin(true);
-    const result = await loginAdmin({ email: trimmedEmail, password: adminPassword });
+    let result;
+    try {
+      result = await loginAdmin({ email: trimmedEmail, password: adminPassword });
+    } catch (error) {
+      console.error('Admin login request failed:', error);
+      setAdminError(`Cannot reach backend at ${BASE_API}. Is it running?`);
+      setIsSubmittingAdmin(false);
+      return;
+    }
     if (!result.ok) {
       setAdminError('Invalid credentials.');
       setIsSubmittingAdmin(false);
