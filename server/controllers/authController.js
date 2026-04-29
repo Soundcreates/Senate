@@ -15,13 +15,21 @@ const buildUserPayload = (user) => ({
 	wakatimeConnected: Boolean(user.wakatimeTokens?.accessToken),
 });
 
-const setSessionCookie = (res, userId) => {
-	res.cookie("session_user", userId.toString(), {
+const getSessionCookieOptions = () => {
+	// In production, the client and API are typically on different origins.
+	// Cross-site cookies require `SameSite=None; Secure`, otherwise the browser
+	// will drop the cookie and subsequent requests (e.g. resume upload) will 401.
+	const isProd = process.env.NODE_ENV === "production";
+	return {
 		httpOnly: true,
-		sameSite: "lax",
-		secure: process.env.NODE_ENV === "production",
+		sameSite: isProd ? "none" : "lax",
+		secure: isProd,
 		maxAge: 7 * 24 * 60 * 60 * 1000,
-	});
+	};
+};
+
+const setSessionCookie = (res, userId) => {
+	res.cookie("session_user", userId.toString(), getSessionCookieOptions());
 };
 
 const signToken = (user) =>
@@ -161,11 +169,7 @@ function logoutAdmin(_req, res) {
 }
 
 function logoutDeveloper(_req, res) {
-	res.clearCookie("session_user", {
-		httpOnly: true,
-		sameSite: "lax",
-		secure: process.env.NODE_ENV === "production",
-	});
+	res.clearCookie("session_user", getSessionCookieOptions());
 	return res.status(200).json({ ok: true });
 }
 

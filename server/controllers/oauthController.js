@@ -70,6 +70,16 @@ const parseCookies = (req) => {
   }, {});
 };
 
+const getSessionCookieOptions = () => {
+  const isProd = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    sameSite: isProd ? "none" : "lax",
+    secure: isProd,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+};
+
 const extractGithubUrls = (githubProfile = {}) => {
   return Object.entries(githubProfile).reduce((acc, [key, value]) => {
     const looksLikeUrl =
@@ -219,12 +229,7 @@ async function HandleWakaTimeOAuth(req, res) {
       { new: true, upsert: true, setDefaultsOnInsert: true },
     );
 
-    res.cookie("session_user", user._id.toString(), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("session_user", user._id.toString(), getSessionCookieOptions());
 
     const cookies = parseCookies(req);
     const redirectPath =
@@ -524,12 +529,7 @@ async function HandleGithubOAuth(req, res) {
       });
     }
 
-    res.cookie("session_user", user._id.toString(), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("session_user", user._id.toString(), getSessionCookieOptions());
 
     const redirectPath =
       cookies[OAUTH_REDIRECT_COOKIE] === "register"
