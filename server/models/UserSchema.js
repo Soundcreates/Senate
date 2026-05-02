@@ -25,6 +25,7 @@ const UserSchema = new mongoose.Schema(
     wakatimeTokens: { type: TokenSchema, default: () => ({}) },
     githubTokens: { type: TokenSchema, default: () => ({}) },
     resume: {type: String, default: null},
+    ingestedSuccess: { type: Boolean, default: false },
     walletAddress: {type: String , default: null},
     projects: [{ type: mongoose.Schema.Types.ObjectId, ref: "Project" }],
   },

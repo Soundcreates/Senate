@@ -22,28 +22,41 @@ const uploadResume = async (req, res) => {
     return res.status(401).json({ error: "unauthorized_session" });
   }
 
+  let uploadResult;
   try {
-    const uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
+    uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
       folder: "resumes",
       resource_type: "raw",
       public_id: `resume_${user._id}_${Date.now()}`,
     });
-
-    user.resume = uploadResult.secure_url;
-    await user.save();
-    await sendToVectorDB(uploadResult.secure_url, user._id.toString());
-    return res.status(200).json({ ok: true, resumeUrl: uploadResult.secure_url });
   } catch (error) {
-    console.error("Resume pipeline failed:", {
+    console.error("Resume upload failed:", {
       message: error.message,
       code: error.code,
       http_code: error.http_code,
     });
-    const errorCode = String(error?.message || "").includes("vector_db")
-      ? "resume_ingestion_failed"
-      : "resume_upload_failed";
-    return res.status(502).json({ error: errorCode });
+    return res.status(502).json({ error: "resume_upload_failed" });
   }
+
+  let ingestedSuccess = false;
+  try {
+    await sendToVectorDB(uploadResult.secure_url, user._id.toString());
+    ingestedSuccess = true;
+  } catch (error) {
+    console.error("Resume ingestion failed; keeping uploaded resume:", {
+      message: error.message,
+    });
+  }
+
+  user.resume = uploadResult.secure_url;
+  user.ingestedSuccess = ingestedSuccess;
+  await user.save();
+
+  return res.status(200).json({
+    ok: true,
+    resumeUrl: uploadResult.secure_url,
+    ingestedSuccess,
+  });
 };
 
 const sendToVectorDB = async (resumeUrl, userId) => {
