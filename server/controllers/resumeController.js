@@ -1,18 +1,7 @@
 const cloudinary = require("../services/cloudinary");
-const User = require("../models/UserSchema");
+const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 
 const getPythonUrl = () => process.env.PYTHON_URL;
-
-const parseCookies = (req) => {
-  const raw = req.headers.cookie;
-  if (!raw) return {};
-  return raw.split(";").reduce((acc, part) => {
-    const [key, ...rest] = part.trim().split("=");
-    if (!key) return acc;
-    acc[key] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
-};
 
 const uploadBufferToCloudinary = (buffer, options) =>
   new Promise((resolve, reject) => {
@@ -28,15 +17,9 @@ const uploadResume = async (req, res) => {
     return res.status(400).json({ error: "resume_missing" });
   }
 
-  const cookies = parseCookies(req);
-  const userId = cookies.session_user;
-  if (!userId) {
-    return res.status(401).json({ error: "unauthorized_session" });
-  }
-
-  const user = await User.findById(userId);
+  const user = await getSessionUserFromRequest(req);
   if (!user) {
-    return res.status(401).json({ error: "user_not_found" });
+    return res.status(401).json({ error: "unauthorized_session" });
   }
 
   try {

@@ -1,31 +1,9 @@
-const User = require("../models/UserSchema");
 const { getRecentCommits } = require("../services/githubService");
-
-const parseCookies = (req) => {
-  const raw = req.headers.cookie;
-  if (!raw) return {};
-  return raw.split(";").reduce((acc, part) => {
-    const [key, ...rest] = part.trim().split("=");
-    if (!key) return acc;
-    acc[key] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
-};
-
-const getSessionUser = async (req) => {
-  const cookies = parseCookies(req);
-  const userId = cookies.session_user;
-  if (userId) {
-    const user = await User.findById(userId);
-    if (user) return user;
-  }
-  // DEV BYPASS: fall back to first user in DB when no session
-  return User.findOne();
-};
+const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 
 const getRecentGithubCommits = async (req, res) => {
   try {
-    const sessionUser = await getSessionUser(req);
+    const sessionUser = await getSessionUserFromRequest(req);
     if (!sessionUser) {
       return res.status(401).json({ error: "no_session" });
     }

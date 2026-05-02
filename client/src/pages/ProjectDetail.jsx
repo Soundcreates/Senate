@@ -8,11 +8,12 @@ import {
 } from 'lucide-react';
 import { getProject, getProjectCodingStats, getProjectCompletionStats } from '../Apis/projectApis';
 import { getEscrowData, MilestoneStatusLabels, MilestoneStatusColors } from '../Apis/escrowApi';
-import { useWalletContext } from '../context/WalletContext';
 import DisputePanel from '../components/DisputePanel';
 import DeployEscrowModal from '../components/DeployEscrowModal';
 import { useAuth } from '../context/AuthContext';
 import TaskDetailModal from '../components/TaskDetailModal';
+import { getExplorerUrl } from '../contracts/addresses/sepolia';
+import { shortenAddress } from '../lib/addressUtils';
 
 /* ---- helpers ---- */
 const getStatusColor = (status) => {
@@ -45,7 +46,6 @@ const ProjectDetail = () => {
     const [escrow, setEscrow] = useState(null);
     const [escrowLoading, setEscrowLoading] = useState(false);
     const [showDeployModal, setShowDeployModal] = useState(false);
-    const { shortenAddress: shorten, getExplorerUrl } = useWalletContext();
     const { user } = useAuth();
     const MotionDiv = motion.div;
 
@@ -676,7 +676,7 @@ const ProjectDetail = () => {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                                     <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#2d2a26', margin: 0 }}>Escrow</h3>
                                     <a href={getExplorerUrl(project.escrowAddress, 'address')} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#a9927d', textDecoration: 'none' }}>
-                                        {shorten(project.escrowAddress)} <ExternalLink size={10} />
+                                        {shortenAddress(project.escrowAddress)} <ExternalLink size={10} />
                                     </a>
                                 </div>
 
@@ -728,7 +728,7 @@ const ProjectDetail = () => {
                                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                                                     <Wallet size={10} style={{ color: '#a9927d' }} />
                                                     <a href={getExplorerUrl(addr, 'address')} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#5e503f', fontFamily: 'monospace', textDecoration: 'none' }}>
-                                                        {shorten(addr)}
+                                                        {shortenAddress(addr)}
                                                     </a>
                                                 </div>
                                             ))}

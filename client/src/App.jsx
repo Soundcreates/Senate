@@ -8,7 +8,6 @@ import Admin from './pages/Admin'
 import AdminDashboard from './pages/AdminDashboard'
 import ProjectDetail from './pages/ProjectDetail'
 import UserDashboard from './pages/UserDashboard'
-import { WalletProvider } from './context/WalletContext'
 import Lenis from 'lenis'
 
 function App() {
@@ -28,20 +27,18 @@ function App() {
     }
   }, [])
   return (
-    <WalletProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/admin-dashboard" element={<AdminDashboard />} />
-          <Route path="/dashboard" element={<UserDashboard />} />
-          <Route path="/project/:id" element={<ProjectDetail />} />
-          <Route path="/user" element={<UserDashboard />} />
-        </Routes>
-      </Router>
-    </WalletProvider>
+    <Router>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/dashboard" element={<UserDashboard />} />
+        <Route path="/project/:id" element={<ProjectDetail />} />
+        <Route path="/user" element={<UserDashboard />} />
+      </Routes>
+    </Router>
   )
 }
 

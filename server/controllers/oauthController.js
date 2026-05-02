@@ -6,6 +6,7 @@ const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_USER_URL = "https://api.github.com/user";
 const GITHUB_EMAILS_URL = "https://api.github.com/user/emails";
 const User = require("../models/UserSchema");
+const { parseCookies, getSessionUserFromRequest } = require("../utils/sessionAuth");
 const MANUAL_EMAIL_COOKIE = "manual_email";
 const ROLE_COOKIE = "manual_role";
 const OAUTH_REDIRECT_COOKIE = "oauth_redirect";
@@ -57,17 +58,6 @@ const buildGithubRedirectUri = () => {
     return configured;
   }
   return GITHUB_CALLBACK_URL;
-};
-
-const parseCookies = (req) => {
-  const raw = req.headers.cookie;
-  if (!raw) return {};
-  return raw.split(";").reduce((acc, part) => {
-    const [key, ...rest] = part.trim().split("=");
-    if (!key) return acc;
-    acc[key] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
 };
 
 const getSessionCookieOptions = () => {
@@ -145,7 +135,6 @@ async function HandleWakaTimeOAuth(req, res) {
       grant_type: "authorization_code",
       code,
     });
-    console.log("Token params is :", tokenParams);
 
     const response = await fetch(WAKATIME_TOKEN_URL, {
       method: "POST",
@@ -155,13 +144,11 @@ async function HandleWakaTimeOAuth(req, res) {
       },
       body: tokenParams.toString(),
     });
-    console.log(response.status);
 
     const responseText = await response.text();
     let tokenData = null;
     try {
       tokenData = JSON.parse(responseText);
-      console.log(tokenData);
     } catch (_err) {
       tokenData = { raw: responseText };
     }
@@ -169,13 +156,12 @@ async function HandleWakaTimeOAuth(req, res) {
     if (!response.ok) {
       console.error("WakaTime token exchange failed", {
         status: response.status,
-        body: tokenData,
+        error: tokenData?.error || "token_exchange_failed",
       });
       return res
         .status(502)
         .json({ error: "token_exchange_failed", details: tokenData });
     }
-    console.log(WAKATIME_USER_URL);
     const userResponse = await fetch(WAKATIME_USER_URL, {
       method: "GET",
       headers: {
@@ -317,13 +303,11 @@ async function HandleGithubOAuth(req, res) {
       role: role || undefined,
       redirectTo: redirectTo || undefined,
     });
-    const stateB64 = Buffer.from(statePayload).toString("base64");
 
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       scope,
-      state: stateB64,
     });
     return res.redirect(`${GITHUB_AUTHORIZE_URL}?${params.toString()}`);
   }
@@ -373,7 +357,6 @@ async function HandleGithubOAuth(req, res) {
     });
 
     const userData = await userResponse.json();
-    console.log("User data: ", userData);
     if (!userResponse.ok) {
       return res
         .status(502)
@@ -430,8 +413,6 @@ async function HandleGithubOAuth(req, res) {
       expiresAt: githubExpiresAt,
       scope: tokenData.scope || null,
     };
-    console.log("Fresh tokens: ", freshGithubTokens);
-
     const existingByGithubId = await User.findOne({ githubId });
     let user;
 
@@ -557,17 +538,7 @@ async function HandleGithubOAuth(req, res) {
 }
 
 async function getSessionUser(req, res) {
-  const cookies = parseCookies(req);
-  const userId = cookies.session_user;
-
-  let user;
-  if (userId) {
-    user = await User.findById(userId).lean();
-  }
-  // DEV BYPASS: fall back to first user in DB when no session
-  if (!user) {
-    user = await User.findOne().lean();
-  }
+  const user = await getSessionUserFromRequest(req);
   if (!user) {
     return res.status(401).json({ error: "no_users_in_db" });
   }

@@ -1,17 +1,5 @@
-
-const User = require("../models/UserSchema");
 const { fetchTimeStats } = require("../services/wakatime-stats");
-
-const parseCookies = (req) => {
-   const raw = req.headers.cookie;
-   if (!raw) return {};
-   return raw.split(";").reduce((acc, part) => {
-      const [key, ...rest] = part.trim().split("=");
-      if (!key) return acc;
-      acc[key] = decodeURIComponent(rest.join("="));
-      return acc;
-   }, {});
-};
+const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 
 const formatDate = (value) => {
    if (!value) return null;
@@ -22,17 +10,7 @@ const formatDate = (value) => {
 
 async function getWakatimeStats(req, res) {
    try {
-      const cookies = parseCookies(req);
-      let userId = cookies.session_user;
-
-      let user;
-      if (userId) {
-         user = await User.findById(userId).lean();
-      }
-      // DEV BYPASS: fall back to first user in DB when no session
-      if (!user) {
-         user = await User.findOne().lean();
-      }
+      const user = await getSessionUserFromRequest(req);
       if (!user) {
          return res.status(401).json({ error: "no_users_in_db" });
       }

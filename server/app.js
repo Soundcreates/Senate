@@ -23,16 +23,15 @@ app.use(
   }),
 );
 app.use(express.json());
-console.log("MONGO URI:", process.env.MONGO_URI);
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
 app.use("/api", require("./routes"));
 
-app.get("/api/health", (req,res) => {
-  return {"message": "Hello world"};
-})
+app.get("/api/health", (_req, res) => {
+  return res.json({ message: "Hello world" });
+});
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not Found", path: req.originalUrl });

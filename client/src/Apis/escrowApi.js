@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getProvider, getSigner, parseTokenAmount, formatTokenAmount } from '../contracts/utils';
+import { getProvider, formatTokenAmount } from '../contracts/utils';
 import { getContractAddress } from '../contracts/addresses/sepolia';
 import { ProductivityEscrowFactoryABI, ProductivityEscrowABI, ERC20ABI } from '../contracts/index';
 
@@ -23,17 +23,7 @@ export async function checkUSDCAllowance(ownerAddress) {
  * @returns {object} Transaction receipt
  */
 export async function approveUSDC(amount) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const usdcAddress = getContractAddress('USDC');
-  const factoryAddress = getContractAddress('ProductivityEscrowFactory');
-  const usdc = new ethers.Contract(usdcAddress, ERC20ABI, signer);
-
-  const parsedAmount = parseTokenAmount(amount, 6);
-  const tx = await usdc.approve(factoryAddress, parsedAmount);
-  const receipt = await tx.wait();
-  return receipt;
+  throw new Error('Wallet-based approvals are disabled in this client');
 }
 
 /**
@@ -57,47 +47,7 @@ export async function createEscrow({
   disputeWindow = 0,
   oracleTimeout = 0,
 }) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const factoryAddress = getContractAddress('ProductivityEscrowFactory');
-  const factory = new ethers.Contract(factoryAddress, ProductivityEscrowFactoryABI, signer);
-
-  // Convert human-readable USDC amounts to wei (6 decimals)
-  const parsedBudgets = milestoneBudgets.map((b) => parseTokenAmount(String(b), 6));
-
-  const tx = await factory.createEscrow(
-    oracle,
-    arbitrator,
-    ethers.ZeroAddress, // use default payment token (USDC)
-    contributors,
-    parsedBudgets,
-    milestoneDeadlines,
-    disputeWindow,
-    oracleTimeout
-  );
-
-  const receipt = await tx.wait();
-
-  // Parse EscrowCreated event to get the escrow address
-  let escrowAddress = null;
-  for (const log of receipt.logs) {
-    try {
-      const parsed = factory.interface.parseLog({ topics: log.topics, data: log.data });
-      if (parsed && parsed.name === 'EscrowCreated') {
-        escrowAddress = parsed.args.escrow;
-        break;
-      }
-    } catch (_e) {
-      // Not a factory log, ignore
-    }
-  }
-
-  return {
-    escrowAddress,
-    txHash: receipt.hash,
-    receipt,
-  };
+  throw new Error('Wallet-based escrow creation is disabled in this client');
 }
 
 /**
@@ -167,13 +117,7 @@ export async function getPendingWithdrawals(escrowAddress, contributorAddress) {
  * Withdraw pending payments from an escrow
  */
 export async function withdrawFromEscrow(escrowAddress) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const escrow = new ethers.Contract(escrowAddress, ProductivityEscrowABI, signer);
-  const tx = await escrow.withdraw();
-  const receipt = await tx.wait();
-  return { txHash: receipt.hash, receipt };
+  throw new Error('Wallet-based withdrawals are disabled in this client');
 }
 
 /**
@@ -192,26 +136,14 @@ export async function getContributorScore(escrowAddress, milestoneId, contributo
  * Raise a dispute for a milestone
  */
 export async function raiseDispute(escrowAddress, milestoneId, reason) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const escrow = new ethers.Contract(escrowAddress, ProductivityEscrowABI, signer);
-  const tx = await escrow.raiseDispute(milestoneId, reason);
-  const receipt = await tx.wait();
-  return { txHash: receipt.hash, receipt };
+  throw new Error('Wallet-based disputes are disabled in this client');
 }
 
 /**
  * Finalize a milestone (after dispute window closes)
  */
 export async function finalizeMilestone(escrowAddress, milestoneId) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const escrow = new ethers.Contract(escrowAddress, ProductivityEscrowABI, signer);
-  const tx = await escrow.finalizeMilestone(milestoneId);
-  const receipt = await tx.wait();
-  return { txHash: receipt.hash, receipt };
+  throw new Error('Wallet-based finalization is disabled in this client');
 }
 
 /**
@@ -255,26 +187,14 @@ export async function isArbitratorAllowed(arbitratorAddress) {
  * Resolve dispute (arbitrator only)
  */
 export async function resolveDispute(escrowAddress, milestoneId, members, correctedScores) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const escrow = new ethers.Contract(escrowAddress, ProductivityEscrowABI, signer);
-  const tx = await escrow.resolveDispute(milestoneId, members, correctedScores);
-  const receipt = await tx.wait();
-  return { txHash: receipt.hash, receipt };
+  throw new Error('Wallet-based dispute resolution is disabled in this client');
 }
 
 /**
  * Refund remaining balance (project owner only)
  */
 export async function refundRemaining(escrowAddress) {
-  const signer = await getSigner();
-  if (!signer) throw new Error('No signer');
-
-  const escrow = new ethers.Contract(escrowAddress, ProductivityEscrowABI, signer);
-  const tx = await escrow.refundRemaining();
-  const receipt = await tx.wait();
-  return { txHash: receipt.hash, receipt };
+  throw new Error('Wallet-based refunds are disabled in this client');
 }
 
 /**

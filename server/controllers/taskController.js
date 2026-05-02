@@ -3,28 +3,7 @@ const Project = require("../models/Project");
 const User = require("../models/UserSchema");
 const { createIssue, checkCollaborator, addCollaborator, assignIssue, getPullRequestsForIssue, getIssueDetails, getPRReviews, getPRReviewComments, postPRReview, getPRDiff, getBranchActivity } = require("../services/githubService");
 const { fetchTimeStats } = require("../services/wakatime-stats");
-
-const parseCookies = (req) => {
-  const raw = req.headers.cookie;
-  if (!raw) return {};
-  return raw.split(";").reduce((acc, part) => {
-    const [key, ...rest] = part.trim().split("=");
-    if (!key) return acc;
-    acc[key] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
-};
-
-const getSessionUser = async (req) => {
-  const cookies = parseCookies(req);
-  const userId = cookies.session_user;
-  if (userId) {
-    const user = await User.findById(userId);
-    if (user) return user;
-  }
-  // DEV BYPASS: fall back to first user in DB when no session
-  return User.findOne();
-};
+const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 
 /**
  * Resolve assignee names to GitHub usernames.
@@ -50,7 +29,7 @@ const resolveGitHubUsernames = async (assigneeNames, token, project) => {
 
 const createTask = async (req, res) => {
   try {
-    const sessionUser = await getSessionUser(req);
+    const sessionUser = await getSessionUserFromRequest(req);
     if (!sessionUser) {
       return res.status(401).json({ error: "no_session" });
     }
@@ -131,7 +110,7 @@ const createTask = async (req, res) => {
 
 const assignTaskMembers = async (req, res) => {
   try {
-    const sessionUser = await getSessionUser(req);
+    const sessionUser = await getSessionUserFromRequest(req);
     if (!sessionUser) {
       return res.status(401).json({ error: "no_session" });
     }
@@ -198,7 +177,7 @@ const assignTaskMembers = async (req, res) => {
 
 const listTasksForProject = async (req, res) => {
   try {
-    const sessionUser = await getSessionUser(req);
+    const sessionUser = await getSessionUserFromRequest(req);
     if (!sessionUser) {
       return res.status(401).json({ error: "no_session" });
     }
@@ -225,7 +204,7 @@ const listTasksForProject = async (req, res) => {
  */
 const getTaskDetails = async (req, res) => {
   try {
-    const sessionUser = await getSessionUser(req);
+    const sessionUser = await getSessionUserFromRequest(req);
     if (!sessionUser) {
       return res.status(401).json({ error: "no_session" });
     }

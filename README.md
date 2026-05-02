@@ -62,46 +62,51 @@ The platform supports onboarding, OAuth integrations (GitHub/WakaTime), task/pro
 
 ## Environment Variables
 
-Create `.env` files in each service.
+Create `.env` files in each service from the checked-in examples. Never commit real secrets.
 
 ### 1) Backend env (`server/.env`)
 
-Minimum required for local development:
+Use [`server/.env.example`](server/.env.example) as the template for local development. The backend currently reads these variables:
 
 ```dotenv
+NODE_ENV=development
 PORT=3000
 MONGO_URI=your_mongodb_uri
+CLIENT_URL=http://localhost:5173
+PYTHON_URL=http://localhost:8000
 JWT_SECRET=your_jwt_secret
 
-CLIENT_URL=https://senate-ojiz.vercel.app/
-PYTHON_URL= PORT 8000 (uvicorn)
-
 # Cloudinary
-CLOUDINARY_URL=your_cloudinary_url
+CLOUDINARY_URL=
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
 CLOUDINARY_API_KEY=your_cloudinary_api_key
 CLOUDINARY_API_SECRET=your_cloudinary_api_secret
-CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
 
-# OAuth
+# OAuth / integrations
 WAKATIME_APP_ID=your_wakatime_app_id
 WAKATIME_APP_SECRET=your_wakatime_app_secret
 WAKATIME_SCOPES=read_summaries read_stats
+WAKATIME_REDIRECT_URI=
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 GITHUB_SCOPES=repo read:user user:email
-# Optional only if you intentionally create org-owned repos (leave unset for personal-account repos):
-# GITHUB_APP_ORG=your_org_login
-
-# Optional explicit redirect URIs
-# WAKATIME_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/wakatime-redirect
-# GITHUB_REDIRECT_URI=https://senate-qiog.onrender.com/api/oauth/github-redirect
+GITHUB_REDIRECT_URI=
+# Optional only if you intentionally create org-owned repos:
+GITHUB_APP_ORG=
+GITHUB_ORG=
+GITHUB_REPO_OWNER=
 
 # Groq (used for task splitting + AI code review)
 GROQ_API_KEY=your_groq_api_key
-# Optional:
-# GROQ_BASE_URL=https://api.groq.com/openai/v1
-# GROQ_MODEL=llama-3.1-70b-versatile
-# GROQ_REVIEW_MODEL=llama-3.1-70b-versatile
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.1-70b-versatile
+GROQ_REVIEW_MODEL=llama-3.1-70b-versatile
+
+# Blockchain / scripts
+SEPOLIA_RPC_URL=
+ORACLE_PRIVATE_KEY=
+ALCHEMY_API_KEY=
+GITHUB_TOKEN=
 ```
 
 ### 2) Resume service env (`resumeRag/.env`)

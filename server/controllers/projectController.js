@@ -2,6 +2,7 @@ const Project = require("../models/Project");
 const ProjectDailyStats = require("../models/ProjectDailyStats");
 const Task = require("../models/Task");
 const User = require("../models/UserSchema");
+const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 const {
 	getTodayCommits,
 	createIssue,
@@ -16,28 +17,6 @@ const {
 	getPullRequestsForIssue,
 } = require("../services/githubService");
 const { storeTodayStats } = require("../services/projectStatsService");
-
-const parseCookies = (req) => {
-	const raw = req.headers.cookie;
-	if (!raw) return {};
-	return raw.split(";").reduce((acc, part) => {
-		const [key, ...rest] = part.trim().split("=");
-		if (!key) return acc;
-		acc[key] = decodeURIComponent(rest.join("="));
-		return acc;
-	}, {});
-};
-
-const getSessionUser = async (req) => {
-	const cookies = parseCookies(req);
-	const userId = cookies.session_user;
-	if (userId) {
-		const user = await User.findById(userId);
-		if (user) return user;
-	}
-	// DEV BYPASS: fall back to first user in DB when no session
-	return User.findOne();
-};
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -223,7 +202,7 @@ const aggregateCodingDaySeries = (memberStats, dateKeys) => {
 
 const createProject = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -288,7 +267,7 @@ const createProject = async (req, res) => {
  */
 const createFullProject = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -630,7 +609,7 @@ const createFullProject = async (req, res) => {
 
 const getProjectById = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -662,7 +641,7 @@ const getProjectById = async (req, res) => {
 
 const listProjects = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -690,7 +669,7 @@ const listProjects = async (req, res) => {
 
 const getTodayActivity = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -724,7 +703,7 @@ const getTodayActivity = async (req, res) => {
 
 const getHistoryActivity = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -750,7 +729,7 @@ const getHistoryActivity = async (req, res) => {
  */
 const linkEscrow = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -793,7 +772,7 @@ const linkEscrow = async (req, res) => {
  */
 const getProjectCodingStats = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}
@@ -829,7 +808,7 @@ const getProjectCodingStats = async (req, res) => {
  */
 const getProjectCompletionStats = async (req, res) => {
 	try {
-		const sessionUser = await getSessionUser(req);
+		const sessionUser = await getSessionUserFromRequest(req);
 		if (!sessionUser) {
 			return res.status(401).json({ error: "no_session" });
 		}

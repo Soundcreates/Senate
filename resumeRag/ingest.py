@@ -12,8 +12,19 @@ def load_api_key() -> str:
     load_dotenv()
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY missing")
+        raise ValueError("GOOGLE_API_KEY missing (needed for Gemini embeddings)")
     return api_key
+
+
+def load_chroma_config() -> dict:
+    load_dotenv()
+    tenant = os.getenv("CHROMA_TENANT")
+    database = os.getenv("CHROMA_DATABASE")
+    api_key = os.getenv("CHROMA_API_KEY")
+    missing = [name for name, value in [("CHROMA_TENANT", tenant), ("CHROMA_DATABASE", database), ("CHROMA_API_KEY", api_key)] if not value]
+    if missing:
+        raise ValueError(f"Missing Chroma Cloud config: {', '.join(missing)}")
+    return {"tenant": tenant, "database": database, "api_key": api_key}
 
 
 def create_gemini_client(api_key: str) -> genai.Client:
@@ -131,14 +142,15 @@ def build_documents(
 
 
 def create_chroma_collection(collection_name: str):
-    print("Tenant:", os.getenv("CHROMA_TENANT"))
-    print("Database:", os.getenv("CHROMA_DATABASE"))
-    print("API Key present:", bool(os.getenv("CHROMA_API_KEY")))
+    config = load_chroma_config()
+    print("Tenant:", config["tenant"])
+    print("Database:", config["database"])
+    print("API Key present:", True)
 
     chroma_client = chromadb.CloudClient(
-        api_key=os.getenv("CHROMA_API_KEY"),
-        tenant=os.getenv("CHROMA_TENANT"),
-        database=os.getenv("CHROMA_DATABASE")
+        api_key=config["api_key"],
+        tenant=config["tenant"],
+        database=config["database"],
     )
     return chroma_client.get_or_create_collection(name=collection_name)
 
