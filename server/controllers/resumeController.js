@@ -42,7 +42,11 @@ const uploadResume = async (req, res) => {
 
   let ingestedSuccess = false;
   try {
-    await sendToVectorDB(uploadResult.secure_url, user._id.toString());
+    const signedUrl = cloudinary.utils.private_download_url(uploadResult.public_id, '', {
+      resource_type: "raw",
+      expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour expiration
+    });
+    await sendToVectorDB(signedUrl, user._id.toString());
     ingestedSuccess = true;
   } catch (error) {
     console.error("Resume ingestion failed; keeping uploaded resume:", {

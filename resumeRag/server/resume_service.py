@@ -14,6 +14,13 @@ async def load_resume(url: str) -> Path:
     ext = url_path.suffix.lower()
 
     if not ext:
+        # Check query parameters (like public_id in Cloudinary signed URLs)
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        public_ids = query_params.get("public_id", [])
+        if public_ids:
+            ext = Path(public_ids[0]).suffix.lower()
+
+    if not ext:
         content_type = response.headers.get("Content-Type", "").lower()
         if "application/pdf" in content_type:
             ext = ".pdf"
