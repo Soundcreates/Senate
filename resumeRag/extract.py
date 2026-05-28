@@ -114,7 +114,8 @@ def run():
             continue
 
         # Output filename: <resume_name>.json
-        output_file = resume.replace(".pdf", ".json")
+        base_name, _ = os.path.splitext(resume)
+        output_file = f"{base_name}.json"
         output_path = os.path.join(OUTPUT_DIR, output_file)
 
         with open(output_path, "w") as f:

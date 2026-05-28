@@ -544,11 +544,11 @@ const Register = () => {
                                     className="hidden"
                                     id="resume-upload"
                                     onChange={handleResumeUpload}
-                                    accept="application/pdf"
+                                    accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,application/rtf,text/rtf"
                                     ref={resumeInputRef}
                                 />
                                 <label htmlFor="resume-upload" className="cursor-pointer text-[#5e503f] font-['Jost']">
-                                    {resumeFile ? resumeFile.name : 'Upload resume (PDF)'}
+                                    {resumeFile ? resumeFile.name : 'Upload resume (PDF, DOCX, DOC, TXT, RTF)'}
                                 </label>
                             </div>
                             {resumeError && (

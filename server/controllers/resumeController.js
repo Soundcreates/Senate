@@ -1,3 +1,4 @@
+const path = require("path");
 const cloudinary = require("../services/cloudinary");
 const { getSessionUserFromRequest } = require("../utils/sessionAuth");
 
@@ -22,12 +23,13 @@ const uploadResume = async (req, res) => {
     return res.status(401).json({ error: "unauthorized_session" });
   }
 
+  const ext = path.extname(req.file.originalname) || "";
   let uploadResult;
   try {
     uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
       folder: "resumes",
       resource_type: "raw",
-      public_id: `resume_${user._id}_${Date.now()}`,
+      public_id: `resume_${user._id}_${Date.now()}${ext}`,
     });
   } catch (error) {
     console.error("Resume upload failed:", {

@@ -3,11 +3,20 @@ const multer = require("multer");
 const { uploadResume } = require("../controllers/resumeController");
 
 const router = express.Router();
+const allowedMimeTypes = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "application/rtf",
+  "text/rtf",
+];
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === "application/pdf") {
+    if (allowedMimeTypes.includes(file.mimetype)) {
       return cb(null, true);
     }
     return cb(new Error("invalid_resume_type"));

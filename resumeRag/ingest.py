@@ -3,7 +3,8 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from google import genai
 from langchain_core.documents import Document
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredFileLoader
+
 from langchain.embeddings.base import Embeddings
 import chromadb
 from typing import Iterable
@@ -55,16 +56,67 @@ class GeminiEmbeddings(Embeddings):
         return res.embeddings[0].values
 
 
+import docx
+
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
+
 def list_resume_files(resume_dir: str) -> list[str]:
     if not os.path.isdir(resume_dir):
         raise FileNotFoundError(f"Resume directory not found: {resume_dir}")
-    return [f for f in os.listdir(resume_dir) if f.lower().endswith(".pdf")]
+    return [
+        f for f in os.listdir(resume_dir)
+        if os.path.splitext(f.lower())[1] in ALLOWED_EXTENSIONS
+    ]
+
+
+def read_pdf(file_path: str) -> str:
+    loader = PyPDFLoader(file_path)
+    pages = loader.load()
+    return "\n".join(page.page_content for page in pages)
+
+
+def read_docx(file_path: str) -> str:
+    loader = Docx2txtLoader(file_path)
+    pages = loader.load()
+    return "\n".join(page.page_content for page in pages)
+
+
+def read_unstructured(file_path: str) -> str:
+    loader = UnstructuredFileLoader(file_path)
+    pages = loader.load()
+    return "\n".join(page.page_content for page in pages)
+
+
+def read_doc_fallback(file_path: str) -> str:
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        import re
+        runs = re.findall(rb"[\x20-\x7E\x0A\x0D\x09]{4,}", content)
+        return b"\n".join(runs).decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"Doc binary extraction failed: {e}")
+        return ""
 
 
 def load_resume_text(resume_dir: str, filename: str) -> str:
-    loader = PyPDFLoader(os.path.join(resume_dir, filename))
-    pages = loader.load()
-    return "\n".join(page.page_content for page in pages)
+    file_path = os.path.join(resume_dir, filename)
+    ext = os.path.splitext(filename.lower())[1]
+    if ext == ".pdf":
+        return read_pdf(file_path)
+    elif ext == ".docx":
+        return read_docx(file_path)
+    elif ext == ".doc":
+        try:
+            return read_unstructured(file_path)
+        except Exception as e:
+            print(f"UnstructuredFileLoader failed for doc, using fallback: {e}")
+            return read_doc_fallback(file_path)
+    elif ext == ".txt":
+        return read_unstructured(file_path)
+    elif ext == ".rtf":
+        return read_unstructured(file_path)
+    return ""
 
 
 def split_resume_sections(full_text: str) -> dict[str, list[str]]:

@@ -134,7 +134,10 @@ async function getRecommendations(req, res) {
  * @param {Object} res - Express response object
  */
 async function checkRAGHealth(req, res) {
+  let RAG_HEALTH_ENDPOINT = "";
   try {
+    const { ragHealthEndpoint } = getRagEndpoints();
+    RAG_HEALTH_ENDPOINT = ragHealthEndpoint;
     const startTime = Date.now();
     
     const response = await fetch(RAG_HEALTH_ENDPOINT, {

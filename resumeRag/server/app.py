@@ -24,17 +24,25 @@ def health_check():
 
 @app.post("/ingest-resume")
 async def ingest_resume(req: ResumeIngestRequest):
+    import shutil
     try:
         print("User id: ", req.userId)
         effective_user_id = req.userId or "anonymous"
         resume_dir = await load_resume(req.resumeUrl)
-        run_ingestion(
-            str(resume_dir),
-            user_id=effective_user_id,
-            resume_url=req.resumeUrl,
-            source_id=f"{effective_user_id}_{uuid4().hex}",
-        )
-        print("Ingestion completed for resume at:", resume_dir)
+        try:
+            run_ingestion(
+                str(resume_dir),
+                user_id=effective_user_id,
+                resume_url=req.resumeUrl,
+                source_id=f"{effective_user_id}_{uuid4().hex}",
+            )
+        finally:
+            try:
+                shutil.rmtree(resume_dir)
+                print("Cleaned up temporary directory:", resume_dir)
+            except Exception as e:
+                print(f"Failed to clean up temp dir {resume_dir}: {e}")
+        print("Ingestion completed for resume")
         return {"status": "ok", "message": "Resume ingested successfully"}
     except Exception as exc:
         # Propagate a useful error back to the Node API so it can be surfaced
