@@ -29,6 +29,7 @@ const uploadResume = async (req, res) => {
     uploadResult = await uploadBufferToCloudinary(req.file.buffer, {
       folder: "resumes",
       resource_type: "raw",
+      type: "authenticated",
       public_id: `resume_${user._id}_${Date.now()}${ext}`,
     });
   } catch (error) {
@@ -44,6 +45,7 @@ const uploadResume = async (req, res) => {
   try {
     const signedUrl = cloudinary.utils.private_download_url(uploadResult.public_id, '', {
       resource_type: "raw",
+      type: "authenticated",
       expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour expiration
     });
     await sendToVectorDB(signedUrl, user._id.toString());

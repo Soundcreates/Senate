@@ -4,6 +4,7 @@ import urllib.parse
 from pathlib import Path
 
 async def load_resume(url: str) -> Path:
+    print("Getting resume from: " + url)
     response = requests.get(url, stream=True, timeout=30)
     response.raise_for_status()
     print(response)

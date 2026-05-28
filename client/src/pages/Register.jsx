@@ -7,7 +7,7 @@ import { startGithubLogin } from '@/Apis/github-authApi';
 import { fetchWakatimeSession, startWakatimeOAuth } from '@/Apis/wakatime-authApi';
 import { uploadResume } from '@/Apis/resumeApi';
 import { registerAdmin } from '@/Apis/admin-authApi';
-import { registerDeveloper } from '@/Apis/authApi';
+import { registerDeveloper, fetchRegisterStatus, completeRegistrationApi } from '@/Apis/authApi';
 
 const Register = () => {
     const containerRef = useRef(null);
@@ -97,6 +97,9 @@ const Register = () => {
         setToken(result.token);
         setUser(result.user);
         setManualEmail(trimmedEmail);
+        if (result.registerToken) {
+            localStorage.setItem('register_token', result.registerToken);
+        }
         try {
             localStorage.setItem('register.email', trimmedEmail);
             localStorage.setItem('register.role', 'admin');
@@ -128,6 +131,9 @@ const Register = () => {
 
         setUser(result.user);
         setManualEmail(trimmedEmail);
+        if (result.registerToken) {
+            localStorage.setItem('register_token', result.registerToken);
+        }
         try {
             localStorage.setItem('register.email', trimmedEmail);
         } catch (_error) {
@@ -173,6 +179,12 @@ const Register = () => {
             return;
         }
 
+        const token = localStorage.getItem('register_token');
+        if (token) {
+            await completeRegistrationApi(token);
+            localStorage.removeItem('register_token');
+        }
+
         navigate('/dashboard');
     };
 
@@ -183,6 +195,53 @@ const Register = () => {
     };
 
     useEffect(() => {
+        const checkExistingSession = async () => {
+            const token = localStorage.getItem('register_token');
+            if (!token) return;
+
+            // If we are processing an active OAuth redirect in this URL, let hydrateFromSession handle it first.
+            const params = new URLSearchParams(location.search);
+            if (params.get('oauth') === 'success') return;
+
+            const result = await fetchRegisterStatus(token);
+            if (result.ok && result.user) {
+                setUser(result.user);
+                setRoleChoice(result.user.role || 'developer');
+                if (result.user.role === 'admin') {
+                    setAdminStep(result.user.githubConnected ? 2 : 1);
+                    if (result.user.githubConnected) {
+                        await completeRegistrationApi(token);
+                        localStorage.removeItem('register_token');
+                        navigate('/dashboard');
+                    }
+                } else {
+                    setWakatimeConnected(Boolean(result.user.wakatimeConnected));
+                    setGithubConnected(Boolean(result.user.githubConnected));
+                    if (!result.user.wakatimeConnected) {
+                        setStep(2);
+                    } else if (!result.user.githubConnected) {
+                        setStep(3);
+                    } else if (!result.user.resume) {
+                        if (!result.user.name || result.user.name === 'Developer' || result.user.name === result.user.email) {
+                            setStep(4);
+                        } else {
+                            setStep(5);
+                        }
+                    } else {
+                        await completeRegistrationApi(token);
+                        localStorage.removeItem('register_token');
+                        navigate('/dashboard');
+                    }
+                }
+            } else {
+                localStorage.removeItem('register_token');
+            }
+        };
+
+        checkExistingSession();
+    }, [location.search, navigate, setUser]);
+
+    useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get('oauth') !== 'success') return;
         if (oauthProcessedRef.current) return;
@@ -191,10 +250,26 @@ const Register = () => {
 
         const hydrateFromSession = async () => {
             oauthProcessedRef.current = true;
-            const result = await fetchWakatimeSession();
-            if (result.ok && result.user) {
-                setUser(result.user);
-                setRoleChoice('developer');
+            
+            const token = localStorage.getItem('register_token');
+            let sessionUser = null;
+            if (token) {
+                const statusResult = await fetchRegisterStatus(token);
+                if (statusResult.ok && statusResult.user) {
+                    sessionUser = statusResult.user;
+                }
+            }
+            
+            if (!sessionUser) {
+                const result = await fetchWakatimeSession();
+                if (result.ok && result.user) {
+                    sessionUser = result.user;
+                }
+            }
+
+            if (sessionUser) {
+                setUser(sessionUser);
+                setRoleChoice(sessionUser.role || 'developer');
                 try {
                     const storedEmail = localStorage.getItem('register.email');
                     if (storedEmail) {
@@ -203,18 +278,21 @@ const Register = () => {
                 } catch (_error) {
                     // ignore storage failures
                 }
-                setWakatimeConnected(Boolean(result.user.wakatimeConnected));
-                setGithubConnected(Boolean(result.user.githubConnected));
+                setWakatimeConnected(Boolean(sessionUser.wakatimeConnected));
+                setGithubConnected(Boolean(sessionUser.githubConnected));
 
-                // Check if this was an admin GitHub connection
                 let storedRole = null;
                 try { storedRole = localStorage.getItem('register.role'); } catch (_e) {}
 
-                if (provider === 'github' && storedRole === 'admin') {
+                if (provider === 'github' && (storedRole === 'admin' || sessionUser.role === 'admin')) {
                     try {
                         localStorage.removeItem('register.email');
                         localStorage.removeItem('register.role');
                     } catch (_e) {}
+                    if (token) {
+                        await completeRegistrationApi(token);
+                        localStorage.removeItem('register_token');
+                    }
                     navigate('/dashboard');
                     return;
                 }
@@ -230,7 +308,6 @@ const Register = () => {
                     }
                     setStep(4);
                 }
-                // Clean up URL
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
             }

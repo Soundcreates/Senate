@@ -35,6 +35,9 @@ const setSessionCookie = (res, userId) => {
 const signToken = (user) =>
 	jwt.sign({ sub: user._id.toString(), role: user.role }, JWT_SECRET, { expiresIn: TOKEN_TTL });
 
+const signRegisterToken = (user) =>
+	jwt.sign({ sub: user._id.toString(), type: "register" }, JWT_SECRET, { expiresIn: "1d" });
+
 const getBearerToken = (req) => {
 	const authHeader = req.headers.authorization || "";
 	if (!authHeader.startsWith("Bearer ")) return null;
@@ -66,10 +69,12 @@ async function registerAdmin(req, res) {
 	});
 
 	const token = signToken(user);
+	const registerToken = signRegisterToken(user);
 	return res.status(201).json({
 		ok: true,
 		token,
 		user: buildUserPayload(user),
+		registerToken,
 	});
 }
 
@@ -94,8 +99,9 @@ async function registerDeveloper(req, res) {
 		passwordHash,
 	});
 
+	const registerToken = signRegisterToken(user);
 	setSessionCookie(res, user._id);
-	return res.status(201).json({ ok: true, user: buildUserPayload(user) });
+	return res.status(201).json({ ok: true, user: buildUserPayload(user), registerToken });
 }
 
 async function loginAdmin(req, res) {
@@ -173,6 +179,36 @@ function logoutDeveloper(_req, res) {
 	return res.status(200).json({ ok: true });
 }
 
+async function getRegisterStatus(req, res) {
+	const registerToken = req.query.registerToken || req.headers["x-register-token"];
+	if (!registerToken) {
+		return res.status(400).json({ error: "missing_register_token" });
+	}
+	try {
+		const payload = jwt.verify(registerToken, JWT_SECRET);
+		if (payload.type !== "register") {
+			return res.status(401).json({ error: "invalid_register_token" });
+		}
+		const user = await User.findById(payload.sub).lean();
+		if (!user) {
+			return res.status(404).json({ error: "user_not_found" });
+		}
+		return res.status(200).json({ ok: true, user: buildUserPayload(user) });
+	} catch (error) {
+		return res.status(401).json({ error: "invalid_register_token" });
+	}
+}
+
+async function completeRegistration(req, res) {
+	res.clearCookie("register_token", {
+		httpOnly: true,
+		sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+		secure: process.env.NODE_ENV === "production",
+		path: "/",
+	});
+	return res.status(200).json({ ok: true });
+}
+
 module.exports = {
 	registerAdmin,
 	registerDeveloper,
@@ -181,4 +217,6 @@ module.exports = {
 	getAdminProfile,
 	logoutAdmin,
 	logoutDeveloper,
+	getRegisterStatus,
+	completeRegistration,
 };

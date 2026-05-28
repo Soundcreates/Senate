@@ -14,7 +14,7 @@ export const registerAdmin = async ({ email, password, name }) => {
   }
 
   const data = await response.json();
-  return { ok: true, token: data.token, user: data.user };
+  return { ok: true, token: data.token, user: data.user, registerToken: data.registerToken };
 };
 
 export const loginAdmin = async ({ email, password }) => {

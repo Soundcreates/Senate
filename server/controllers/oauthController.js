@@ -1,3 +1,5 @@
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET;
 const WAKATIME_AUTHORIZE_URL = "https://wakatime.com/oauth/authorize";
 const WAKATIME_TOKEN_URL = "https://wakatime.com/oauth/token";
 const WAKATIME_USER_URL = "https://wakatime.com/api/v1/users/current";
@@ -117,6 +119,16 @@ async function HandleWakaTimeOAuth(req, res) {
         maxAge: 15 * 60 * 1000,
       });
     }
+    const registerToken = req.query.registerToken;
+    if (registerToken) {
+      const isProd = process.env.NODE_ENV === "production";
+      res.cookie("register_token", registerToken, {
+        httpOnly: true,
+        sameSite: isProd ? "none" : "lax",
+        secure: isProd,
+        maxAge: 15 * 60 * 1000,
+      });
+    }
     console.log("No code received, redirecting to WakaTime authorize URL");
     const params = new URLSearchParams({
       client_id: clientId,
@@ -197,27 +209,56 @@ async function HandleWakaTimeOAuth(req, res) {
       ? new Date(Date.now() + Number(tokenData.expires_in) * 1000)
       : null;
 
-    const user = await User.findOneAndUpdate(
-      { email },
-      {
-        name: userData.display_name || userData.username || "WakaTime User",
-        email,
-        avatarUrl: userData.photo || userData.profile_image || null,
-        provider: "wakatime",
-        wakatimeId,
-        wakatimeTokens: {
-          accessToken: tokenData.access_token || null,
-          refreshToken: tokenData.refresh_token || null,
-          expiresAt,
-          scope: tokenData.scope || null,
+    const cookies = parseCookies(req);
+    const registerToken = cookies["register_token"];
+    let existingUser = null;
+    if (registerToken) {
+      try {
+        const payload = jwt.verify(registerToken, JWT_SECRET);
+        if (payload.type === 'register') {
+          existingUser = await User.findById(payload.sub);
+        }
+      } catch (err) {
+        console.error("Invalid registerToken in WakaTime callback:", err.message);
+      }
+    }
+
+    let user;
+    if (existingUser) {
+      console.log("Linking WakaTime to user via registerToken:", existingUser._id);
+      existingUser.wakatimeId = wakatimeId;
+      existingUser.wakatimeTokens = {
+        accessToken: tokenData.access_token || null,
+        refreshToken: tokenData.refresh_token || null,
+        expiresAt,
+        scope: tokenData.scope || null,
+      };
+      if (!existingUser.avatarUrl) {
+        existingUser.avatarUrl = userData.photo || userData.profile_image || null;
+      }
+      user = await existingUser.save();
+    } else {
+      user = await User.findOneAndUpdate(
+        { email },
+        {
+          name: userData.display_name || userData.username || "WakaTime User",
+          email,
+          avatarUrl: userData.photo || userData.profile_image || null,
+          provider: "wakatime",
+          wakatimeId,
+          wakatimeTokens: {
+            accessToken: tokenData.access_token || null,
+            refreshToken: tokenData.refresh_token || null,
+            expiresAt,
+            scope: tokenData.scope || null,
+          },
         },
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true },
-    );
+        { new: true, upsert: true, setDefaultsOnInsert: true },
+      );
+    }
 
     res.cookie("session_user", user._id.toString(), getSessionCookieOptions());
 
-    const cookies = parseCookies(req);
     const redirectPath =
       cookies[WAKATIME_REDIRECT_COOKIE] === "register" ? "/register" : "/login";
     res.clearCookie(WAKATIME_REDIRECT_COOKIE, {
@@ -292,6 +333,17 @@ async function HandleGithubOAuth(req, res) {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 15 * 60 * 1000,
+      });
+    }
+    const registerToken = req.query.registerToken;
+    if (registerToken) {
+      const isProd = process.env.NODE_ENV === "production";
+      res.cookie("register_token", registerToken, {
+        httpOnly: true,
+        sameSite: isProd ? "none" : "lax",
+        secure: isProd,
         path: "/",
         maxAge: 15 * 60 * 1000,
       });
@@ -413,10 +465,26 @@ async function HandleGithubOAuth(req, res) {
       expiresAt: githubExpiresAt,
       scope: tokenData.scope || null,
     };
+    const registerToken = cookies["register_token"];
+    let existingUser = null;
+    if (registerToken) {
+      try {
+        const payload = jwt.verify(registerToken, JWT_SECRET);
+        if (payload.type === 'register') {
+          existingUser = await User.findById(payload.sub);
+        }
+      } catch (err) {
+        console.error("Invalid registerToken in GitHub callback:", err.message);
+      }
+    }
+
     const existingByGithubId = await User.findOne({ githubId });
     let user;
 
-    if (!existingByGithubId) {
+    if (existingUser) {
+      console.log("Linking GitHub to user via registerToken:", existingUser._id);
+      user = existingUser;
+    } else if (!existingByGithubId) {
       // No account with this GitHub ID → create fresh or link to existing email
       const existingByEmail = lookupEmail
         ? await User.findOne({ email: lookupEmail })

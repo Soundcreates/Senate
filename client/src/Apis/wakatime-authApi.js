@@ -7,6 +7,10 @@ export const startWakatimeOAuth = (redirectTo) => {
   if (redirectTo) {
     url.searchParams.set("redirectTo", redirectTo);
   }
+  const registerToken = localStorage.getItem("register_token");
+  if (registerToken) {
+    url.searchParams.set("registerToken", registerToken);
+  }
   window.location.assign(url.toString());
 };
 

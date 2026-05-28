@@ -15,5 +15,9 @@ export const startGithubLogin = (manualEmail, redirectTo, role) => {
   if (role === "admin" || role === "developer") {
     url.searchParams.set("role", role);
   }
+  const registerToken = localStorage.getItem("register_token");
+  if (registerToken) {
+    url.searchParams.set("registerToken", registerToken);
+  }
   window.location.assign(url.toString());
 };

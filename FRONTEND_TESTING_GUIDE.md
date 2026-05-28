@@ -14,7 +14,7 @@
 
 1. **Open the app**: https://senate-ojiz.vercel.app/
 2. **Login/Register** with your account
-3. **Connect MetaMask**:
+3. **Connect wallet**:
    - Click wallet connect button (if in navbar) or go to Register page
    - Make sure you're on **Sepolia testnet**
    - Need test ETH? Get it from [Sepolia Faucet](https://sepoliafaucet.com/)
@@ -51,10 +51,10 @@
    - **Contributors**: Auto-filled from team wallets — verify all addresses are valid
 4. **Approve USDC**:
    - Modal will show your USDC balance
-   - Click "Approve USDC" → MetaMask pops up → Confirm
+  - Click "Approve USDC" → confirm in your wallet
    - Wait for confirmation (~ 10-20 sec)
 5. **Deploy Escrow**:
-   - Click "Deploy Escrow" → MetaMask pops up → Confirm
+  - Click "Deploy Escrow" → confirm in your wallet
    - Wait for deployment (~ 20-30 sec)
    - Transaction hash and escrow address will appear
 6. **Link to Backend**:
@@ -119,7 +119,7 @@ curl -X POST https://senate-qiog.onrender.com/api/oracle/submit-scores \
 2. **Connect Wallet** (same wallet that was in contributors list)
 3. **Check "Payments" card**: Should show pending USDC amount
 4. **Scroll to "Pending Payments" section**: Should list the project
-5. **Click "Withdraw"** → MetaMask pops up → Confirm
+5. **Click "Withdraw"** → confirm in your wallet
 6. **Wait** for tx confirmation
 7. **Verify**: Amount should appear in your wallet's USDC balance
 
@@ -135,7 +135,7 @@ curl -X POST https://senate-qiog.onrender.com/api/oracle/submit-scores \
 2. **Scroll to DisputePanel** (left column, below Tasks)
 3. **Click "Raise Dispute"** on a milestone
 4. **Enter reason**: e.g., "Scores are incorrect"
-5. **Submit** → MetaMask pops up → Confirm
+5. **Submit** → confirm in your wallet
 6. **Wait** for confirmation
 7. **Check status**: Milestone should now show "In Dispute" (status 2)
 
@@ -153,7 +153,7 @@ curl -X POST https://senate-qiog.onrender.com/api/oracle/submit-scores \
 
 1. Go to **ProjectDetail** page
 2. **DisputePanel** → Find milestone with status "ScoresSubmitted" and expired dispute window
-3. **Click "Finalize"** → MetaMask pops up → Confirm
+3. **Click "Finalize"** → confirm in your wallet
 4. **Wait** for confirmation
 5. **Status changes**: Milestone → "Finalized" (status 3)
 
@@ -187,7 +187,7 @@ curl -X POST https://senate-qiog.onrender.com/api/oracle/finalize \
 
 ## 🧪 Quick Testing Checklist
 
-- [ ] MetaMask connected to Sepolia
+- [ ] Wallet connected to Sepolia
 - [ ] Have test ETH for gas
 - [ ] Have test USDC (at least 100 for small test)
 - [ ] Project created with team members
@@ -203,7 +203,7 @@ curl -X POST https://senate-qiog.onrender.com/api/oracle/finalize \
 ## 🐛 Troubleshooting
 
 **"Wrong network" error**:
-- Switch MetaMask to Sepolia testnet (Chain ID: 11155111)
+- Switch your wallet to Sepolia testnet (Chain ID: 11155111)
 
 **"Insufficient USDC balance"**:
 - Get test USDC from [Circle Faucet](https://faucet.circle.com/)
